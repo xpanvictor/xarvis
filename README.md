@@ -92,6 +92,11 @@ pip install -r requirements.txt
 python main.py
 ```
 Could also use make.
+```bash
+make init
+make test
+make run
+```
 
 ## 8. Contributing
 Feel free to send PRs.

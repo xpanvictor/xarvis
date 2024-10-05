@@ -1,7 +1,15 @@
+
 init:
-    pip install -r requirements.txt
+	@echo "Initializing the environment and installing dependencies..."
+	python3 -m venv venv
+	source venv/bin/activate && pip install -r requirements.txt
 
 test:
-    py.test tests
+	@echo "Running tests..."
+	py.test tests
 
-.PHONY: init test
+run:
+	@echo "Running Xarvis..."
+	python main.py
+
+.PHONY: init test run
