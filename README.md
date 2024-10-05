@@ -16,7 +16,7 @@ Halo, Xarvis to save as much as possible, time flees.
 6. [Setup](#6-setup)
 7. [Usage](#7-usage)
 8. [Contributing](#8-contributing)
-9. [License](#9-license)
+9. [Licence](#9-licence)
 
 ## 1. Project Overview
 
@@ -96,6 +96,6 @@ Could also use make.
 ## 8. Contributing
 Feel free to send PRs.
 
-## 9. License
+## 9. Licence
 Refer to [LICENCE](https://github.com/xpanvictor/xarvis/blob/master/LICENCE).
 
