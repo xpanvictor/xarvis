@@ -1,2 +1,5 @@
-// build
+# build
 env
+venv
+# logs
+*.log
