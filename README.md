@@ -96,6 +96,6 @@ Could also use make.
 ## 8. Contributing
 Feel free to send PRs.
 
-## 9. Licence
+## 9. License
 Refer to [LICENCE](https://github.com/xpanvictor/xarvis/blob/master/LICENCE).
 
