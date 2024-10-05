@@ -8,15 +8,15 @@ Halo, Xarvis to save as much as possible, time flees.
 
 
 ## Table of Contents
-1. [Project Overview](#project-overview)
-2. [System Architecture](#system-architecture)
-3. [Features](#features)
-4. [Backbone](#backbone)
-5. [Core Components](#core-components)
-6. [Setup](#setup)
-7. [Usage](#usage)
-8. [Contributing](#contributing)
-9. [License](#license)
+1. [Project Overview](#1-project-overview)
+2. [System Architecture](#2-system-architecture)
+3. [Features](#3-features)
+4. [Backbone](#4-backbone)
+5. [Core Components](#5-core-components)
+6. [Setup](#6-setup)
+7. [Usage](#7-usage)
+8. [Contributing](#8-contributing)
+9. [License](#9-license)
 
 ## 1. Project Overview
 
