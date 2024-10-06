@@ -4,3 +4,5 @@ env
 venv
 # logs
 *.log
+# resources
+generated/

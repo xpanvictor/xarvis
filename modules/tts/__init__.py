@@ -12,7 +12,9 @@ def generate_audio(text: str) -> str:
     @:returns: name of generated wav file
     """
     # TODO: the audio generation
-    return generate_audio_file_path(text)
+    audio_output_path = generate_audio_file_path(text)
+    # send to audio generator
+    return audio_output_path
 
 
 def generate_audio_file_path(context: str) -> str:
