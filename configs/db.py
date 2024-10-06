@@ -5,15 +5,27 @@ import constants
 
 
 class Database:
+    """
+    Singleton class for db conn
+    """
+    instance = None
     connection: Connection | None = None
+
+    def __new__(cls):
+        if not hasattr(cls, 'instance'):
+            cls.instance = super(Database, cls).__new__(cls)
+        return cls.instance
+
     def __init__(self):
         db_url = constants.DB_URL
         if db_url is None:
             raise ValueError("DB_URL cannot be None")
-        connection = sqlite3.connect(db_url)
+        self.connection = sqlite3.connect(db_url)
 
 
-    @staticmethod
-    def get_conn_cursor() -> Cursor:
-        return Database.connection.cursor()
+    def get_conn_cursor(self) -> Cursor:
+        return self.connection.cursor()
+
+    def close(self):
+        self.connection.close()
 
