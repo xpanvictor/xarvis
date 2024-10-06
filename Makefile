@@ -1,3 +1,7 @@
+ifneq (,$(wildcard ./.env))
+    include .env
+    export
+endif
 
 init:
 	@echo "Initializing the environment and installing dependencies..."
