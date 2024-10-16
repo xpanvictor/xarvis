@@ -10,7 +10,7 @@ init:
 
 test:
 	@echo "Running tests..."
-	pytest
+	pytest -s
 
 run:
 	@echo "Running Xarvis..."
