@@ -1,0 +1,47 @@
+services:
+
+  go-server:
+    build: ./go-server
+    container_name: xarvis-go
+    ports:
+      - "8080:8080" # HTTP REST API + WebSocket
+      - "9090:9090" # Optional WebSocket control
+    environment:
+      - MEMORY_SERVICE_URL=http://memory-service:6333
+      - AUDIO_SERVICE_URL=http://audio-service:5005
+      - MQTT_BROKER=mqtt://mosquitto:1883
+    depends_on:
+      - memory-service
+      - audio-service
+      - mosquitto
+
+  audio-service:
+    build: ./audio-service
+    container_name: xarvis-audio
+    ports:
+      - "5005:5005"
+    volumes:
+      - ./audio-service/data:/app/data
+    restart: unless-stopped
+
+  memory-service:
+    image: qdrant/qdrant:v1.3.0
+    container_name: xarvis-memory
+    ports:
+      - "6333:6333"
+    volumes:
+      - ./memory-service/qdrant:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__GRPC_PORT=6334
+      - QDRANT__SERVICE__HTTP_PORT=6333
+
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: xarvis-mqtt
+    ports:
+      - "1883:1883"
+      - "9001:9001" # MQTT WebSocket
+    volumes:
+      - ./mqtt-broker/config:/mosquitto/config
+      - ./mqtt-broker/data:/mosquitto/data
+      - ./mqtt-broker/log:/mosquitto/log

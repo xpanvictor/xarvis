@@ -5,7 +5,7 @@ import (
 
 	"github.com/xpanvictor/xarvis/internal/config"
 	"github.com/xpanvictor/xarvis/internal/database"
-	"github.com/xpanvictor/xarvis/pkg/logger"
+	"github.com/xpanvictor/xarvis/pkg/Logger"
 )
 
 // This is the main entry point for the API server.
@@ -18,7 +18,7 @@ func main() {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 	// load global logger
-	logger := logger.New(cfg.Debug)
+	logger := Logger.New(cfg.Debug)
 	logger.Info("Logger initialized")
 	// fetch database connection
 	db, err := database.InitDB(cfg)
