@@ -15,8 +15,15 @@ type DBConfig struct {
 	PoolSize int    `mapstructure:"pool_size"`
 }
 
+func (d DBConfig) DSN() string {
+	return fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
+		d.Host, d.Port, d.Username, d.Password, d.Name)
+}
+
 type Settings struct {
-	DB DBConfig `mapstructure:"database"`
+	DB    DBConfig `mapstructure:"database"`
+	Env   string   `mapstructure:"env"`
+	Debug bool     `mapstructure:"debug" default:"false"`
 }
 
 func Load() (*Settings, error) {
