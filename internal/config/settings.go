@@ -20,10 +20,15 @@ func (d DBConfig) DSN() string {
 		d.Host, d.Port, d.Username, d.Password, d.Name)
 }
 
+type AssistantKeysObj struct {
+	OpenAiApiKey string `mapstructure:"open_ai_api_key`
+}
+
 type Settings struct {
-	DB    DBConfig `mapstructure:"database"`
-	Env   string   `mapstructure:"env"`
-	Debug bool     `mapstructure:"debug" default:"false"`
+	DB            DBConfig         `mapstructure:"database"`
+	AssistantKeys AssistantKeysObj `mapstructure:"assistantKeys"`
+	Env           string           `mapstructure:"env"`
+	Debug         bool             `mapstructure:"debug" default:"false"`
 }
 
 func Load() (*Settings, error) {
