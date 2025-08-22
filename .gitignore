@@ -7,3 +7,6 @@ venv
 *.log
 # resources
 generated/
+
+# config files
+config_*.yaml

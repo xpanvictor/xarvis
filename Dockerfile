@@ -35,8 +35,8 @@ COPY --from=builder /app/bin /app/bin
 # Optional: copy configs
 COPY internal/config /app/config
 
-# Expose port for API
-EXPOSE 8080
+# Expose port for API & QT
+EXPOSE 8080 9090
 
 # Default entrypoint (can be overridden in docker-compose)
 ENTRYPOINT ["/app/bin/api"]
