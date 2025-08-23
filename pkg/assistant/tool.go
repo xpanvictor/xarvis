@@ -1,6 +1,8 @@
 package assistant
 
-import "fmt"
+import (
+	"fmt"
+)
 
 func NewAssistantTool(
 	name string,
