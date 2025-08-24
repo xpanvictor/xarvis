@@ -24,11 +24,16 @@ type AssistantKeysObj struct {
 	OpenAiApiKey string `mapstructure:"open_ai_api_key`
 }
 
+type BrainConfig struct {
+	MaxToolCallLimit int `mapstructure:"max_tool_call_limit"`
+}
+
 type Settings struct {
 	DB            DBConfig         `mapstructure:"database"`
 	AssistantKeys AssistantKeysObj `mapstructure:"assistantKeys"`
 	Env           string           `mapstructure:"env"`
 	Debug         bool             `mapstructure:"debug" default:"false"`
+	BrainConfig   BrainConfig
 }
 
 func Load() (*Settings, error) {

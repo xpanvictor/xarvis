@@ -29,3 +29,13 @@ func (m *Message) ToAssistantMessage() assistant.AssistantMessage {
 		MsgRole:   m.MsgRole,
 	}
 }
+
+func AssistantMsgToMessage(am *assistant.AssistantMessage, userId string) Message {
+	return Message{
+		Id:        "todo",
+		UserId:    userId,
+		Text:      am.Content,
+		MsgRole:   am.MsgRole,
+		Timestamp: am.CreatedAt,
+	}
+}

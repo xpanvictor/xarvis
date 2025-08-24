@@ -20,7 +20,7 @@ func NewAssistantTool(
 
 func (ate *AssistantToolsElement) CallTool(
 	name string,
-	args []interface{},
+	args map[string]any,
 ) (*ToolCall, error) {
 	for _, tool := range ate.ToolList {
 		if tool.Name == name {
@@ -35,4 +35,14 @@ func (ate *AssistantToolsElement) CallTool(
 		}
 	}
 	return nil, fmt.Errorf("tool call not found: `%v`", name)
+}
+
+func (ate *AssistantToolsElement) ConsumeCall() (*ToolCall, bool) {
+	if len(ate.StoredToolCalls) <= 0 {
+		return nil, false
+	}
+
+	toolCall := ate.StoredToolCalls[0]
+	ate.StoredToolCalls = ate.StoredToolCalls[1:]
+	return &toolCall, true
 }

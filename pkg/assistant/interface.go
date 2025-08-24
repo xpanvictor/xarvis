@@ -11,12 +11,14 @@ const (
 	USER      Role = "user"
 	ASSISTANT Role = "assistant"
 	SYSTEM    Role = "system"
+	TOOL      Role = "tool"
 )
 
 type AssistantMessage struct {
-	Content   string
-	CreatedAt time.Time
-	MsgRole   Role
+	Content      string
+	CreatedAt    time.Time
+	MsgRole      Role
+	ToolResponse *ToolCall
 }
 
 type AssistantToolType struct {
@@ -44,14 +46,21 @@ const (
 	PENDING ToolCallStatus = iota
 	CONSUMED
 	SUCCESS
+	PROGRESS
 	FAILED
 )
 
+type ToolResult struct {
+	Response map[string]any
+}
+
 type ToolCall struct {
-	Id        string
-	Name      string
-	Arguments []interface{}
-	Status    ToolCallStatus
+	Id              string
+	Name            string
+	Arguments       map[string]any
+	Status          ToolCallStatus
+	Result          *ToolResult
+	RunningDuration time.Duration
 }
 
 type AssistantOutput struct {
