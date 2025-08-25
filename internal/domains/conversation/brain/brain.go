@@ -7,6 +7,7 @@ import (
 
 	"github.com/xpanvictor/xarvis/internal/config"
 	"github.com/xpanvictor/xarvis/internal/domains/conversation"
+	"github.com/xpanvictor/xarvis/pkg/Logger"
 	"github.com/xpanvictor/xarvis/pkg/assistant"
 	toolsystem "github.com/xpanvictor/xarvis/pkg/tool_system"
 )
@@ -16,6 +17,7 @@ type Brain struct {
 	assistant assistant.Assistant
 	registry  toolsystem.Registry
 	executor  toolsystem.Executor
+	logger Logger.Logger
 	// memory
 	// msg history
 }
@@ -125,13 +127,25 @@ func (b *Brain) Think(ctx context.Context, userID string){
 	}
 	// gather context about user using:
 	// memory, projects, approvals, persona
+	userCtxInfo, _ := b.gatherUserContextInfo(ctx, userID)
+	reflection, _ := b.reflect(ctx, userID, *userCtxInfo)
+	plan, err := b.plan(ctx, *reflection)
+	if err != nil {
+		return; // only plan's error matters now
+	}
+	b.logger.Debug(plan)
+	// enter decision loop based on plan 
+	// observe and update memory 
+	// update project, persona, approvals
+	// actions can involve requesting attention or reaching out
+	panic("unimpl think")
 }
 
 func (b *Brain) gatherUserContextInfo(ctx context.Context, userID string) (* UserCtxInfo, error) {
 	panic("unimpl info")
 }
 
-func (b *Brain) reflect(ctx, userId string, userContext UserCtxInfo) (*Reflection, error) {
+func (b *Brain) reflect(ctx context.Context, userId string, userContext UserCtxInfo) (*Reflection, error) {
 	panic("unimpl reflect")
 }
 
