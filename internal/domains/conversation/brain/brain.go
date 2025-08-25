@@ -116,3 +116,31 @@ func (b *Brain) ExecuteToolCallsParallel(
 	wg.Wait()
 	return toolResponses, len(toolCalls)
 }
+
+func (b *Brain) Think(ctx context.Context, userID string){
+	// acquire shared distributed lock
+	ok := b.acquireMindLock(ctx, userID)
+	if !ok {
+		return; // handle proper assessment & retry
+	}
+	// gather context about user using:
+	// memory, projects, approvals, persona
+}
+
+func (b *Brain) gatherUserContextInfo(ctx context.Context, userID string) (* UserCtxInfo, error) {
+	panic("unimpl info")
+}
+
+func (b *Brain) reflect(ctx, userId string, userContext UserCtxInfo) (*Reflection, error) {
+	panic("unimpl reflect")
+}
+
+func (b *Brain) plan(ctx context.Context, reflection Reflection) (*Plan, error) {
+	panic("unimpl plan")
+}
+
+func (b *Brain) acquireMindLock(ctx context.Context, userId string) bool {
+	// TODO: handle mind lock
+	return true
+}
+
