@@ -1,5 +1,5 @@
 # Stage 1: Build
-FROM golang:1.23.4-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 # Set Go env
 ENV CGO_ENABLED=0 \
@@ -22,16 +22,20 @@ RUN go build -o bin/api ./cmd/api/main.go
 # Note: No worker binary in this repo; skip building worker
 
 # Stage 1.5: Dev with hot reload (Air)
-FROM golang:1.23.4-alpine AS dev
+FROM golang:1.24-alpine AS dev
 
+# For dev, don't force GOOS/GOARCH; match build platform
 ENV CGO_ENABLED=0 \
-    GOOS=linux \
-    GOARCH=amd64
+    PATH=$PATH:/go/bin
 
 WORKDIR /app
 
 # Install dev tools (Air)
-RUN apk add --no-cache git curl && \
+# - Add CA certs to avoid TLS errors when fetching modules
+# - Use Go proxy for reliable module downloads
+ENV GOPROXY=https://proxy.golang.org,direct
+RUN apk add --no-cache ca-certificates git curl && \
+    update-ca-certificates && \
     go install github.com/air-verse/air@latest
 
 # Cache deps first
@@ -59,7 +63,7 @@ COPY --from=builder /app/bin /app/bin
 COPY internal/config /app/config
 
 # Expose port for API & QT
-EXPOSE 8080 9090
+EXPOSE 8088 9090
 
 # Default entrypoint (can be overridden in docker-compose)
 ENTRYPOINT ["/app/bin/api"]

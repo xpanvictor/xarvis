@@ -1,4 +1,4 @@
-version: "3.9"
+## Compose version key is obsolete; omitted intentionally.
 
 x-health: &health
   interval: 10s
@@ -27,10 +27,13 @@ services:
     command:
       - "--api.insecure=true"
       - "--providers.docker=true"
+      - "--providers.docker.network=backend"
       - "--entrypoints.web.address=:80"
     ports:
       - "80:80"
       - "8081:8080" # dashboard
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     networks: [ edge, backend ]
     healthcheck:
       test: [ "CMD", "wget", "-qO-", "http://localhost:8080/api/rawdata" ]
@@ -48,9 +51,13 @@ services:
     environment:
       # In dev, read config from the repo root
       XARVIS_CONFIG: /app/config_dev.yaml
+      PORT: "8088"
     volumes:
       # Live-reload: bind mount source into /app for Air
       - ./:/app
+    # Ensure we run Air in dev, even if a cached image has an ENTRYPOINT
+    entrypoint: ""
+    command: [ "air", "-c", ".air.toml" ]
     depends_on:
       - mosquitto
     networks: [ backend ]
@@ -87,7 +94,10 @@ services:
   # ───────────────────────── Voice (opt-in with --profile voice) ─────────────────────────
   stt-whisper:
     profiles: [ "voice" ]
-    image: ghcr.io/ggerganov/whisper.cpp:server
+    image: ghcr.io/ggerganov/whisper.cpp:main
+    # If running on Apple Silicon and the image lacks arm64,
+    # uncomment the next line to use x86 emulation.
+    platform: linux/amd64
     command: [ "./server", "-m", "/models/ggml-base.en.bin", "-l", "auto", "-t", "4" ]
     networks: [ backend ]
     ports: [ "8080:8080" ]
@@ -106,21 +116,27 @@ services:
 
   tts-piper:
     profiles: [ "voice" ]
-    image: rhasspy/piper
+    image: lscr.io/linuxserver/piper:latest
+    # platform: linux/amd64  # uncomment on Apple Silicon if needed
     environment:
+      PUID: 1000
+      PGID: 1000
+      TZ: ${TZ:-Etc/UTC}
       PIPER_VOICE: en_US-lessac-medium
     networks: [ backend ]
-    ports: [ "5002:5002" ]
+    # LinuxServer Piper exposes 10200 in-container; map to 5002 externally
+    ports: [ "5002:10200" ]
     volumes:
-      - ./infra/piper:/data:ro
+      - ./infra/piper:/config
+      - ./infra/piper/models:/models
     healthcheck:
-      test: [ "CMD", "wget", "-qO-", "http://localhost:5002/api/health" ]
+      test: [ "CMD", "wget", "-qO-", "http://localhost:10200/api/health" ]
       <<: *health
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.tts.rule=PathPrefix(`/v1/tts`)"
       - "traefik.http.routers.tts.entrypoints=web"
-      - "traefik.http.services.tts.loadbalancer.server.port=5002"
+      - "traefik.http.services.tts.loadbalancer.server.port=10200"
       - "traefik.http.middlewares.tts-strip.stripprefix.prefixes=/v1/tts"
       - "traefik.http.routers.tts.middlewares=tts-strip@docker"
 

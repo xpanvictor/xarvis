@@ -19,7 +19,7 @@ help:
 .PHONY: up down restart logs proxy voice ai qdrant tidb clean
 
 up:
-	$(DOCKER_COMPOSE) up -d mosquitto xarvis-core
+	$(DOCKER_COMPOSE) up -d --build mosquitto xarvis-core
 
 down:
 	$(DOCKER_COMPOSE) down

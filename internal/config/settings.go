@@ -8,23 +8,28 @@ import (
 )
 
 type DBConfig struct {
-	Host     string `mapstructure:"host"`
-	Port     int    `mapstructure:"port"`
-	Username string `mapstructure:"username"`
-	Password string `mapstructure:"password"`
-	Name     string `mapstructure:"name"`
-	PoolSize int    `mapstructure:"pool_size"`
+    Host     string `mapstructure:"host"`
+    Port     int    `mapstructure:"port"`
+    Username string `mapstructure:"username"`
+    Password string `mapstructure:"password"`
+    Name     string `mapstructure:"name"`
+    PoolSize int    `mapstructure:"pool_size"`
+    TLS      bool   `mapstructure:"tls"`
 }
 
 func (d DBConfig) DSN() string {
     // MySQL/TiDB DSN
     // username:password@tcp(host:port)/dbname?params
-    if d.Password == "" {
-        return fmt.Sprintf("%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
-            d.Username, d.Host, d.Port, d.Name)
+    base := "charset=utf8mb4&parseTime=True&loc=Local"
+    if d.TLS {
+        base += "&tls=true"
     }
-    return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
-        d.Username, d.Password, d.Host, d.Port, d.Name)
+    if d.Password == "" {
+        return fmt.Sprintf("%s@tcp(%s:%d)/%s?%s",
+            d.Username, d.Host, d.Port, d.Name, base)
+    }
+    return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?%s",
+        d.Username, d.Password, d.Host, d.Port, d.Name, base)
 }
 
 type AssistantKeysObj struct {
