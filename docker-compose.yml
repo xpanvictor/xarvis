@@ -1,47 +1,197 @@
+version: "3.9"
+
+x-health: &health
+  interval: 10s
+  timeout: 5s
+  retries: 12
+  start_period: 20s
+
+networks:
+  edge: {}
+  backend: {}
+
+volumes:
+  mosquitto_data:
+  mosquitto_log:
+  qdrant_data:
+  ollama_data:
+  tei_data:
+
+
 services:
-
-  go-server:
-    build: ./go-server
-    container_name: xarvis-go
-    ports:
-      - "8080:8080" # HTTP REST API + WebSocket
-      - "9090:9090" # Optional WebSocket control
-    environment:
-      - MEMORY_SERVICE_URL=http://memory-service:6333
-      - AUDIO_SERVICE_URL=http://audio-service:5005
-      - MQTT_BROKER=mqtt://mosquitto:1883
-    depends_on:
-      - memory-service
-      - audio-service
-      - mosquitto
-
-  audio-service:
-    build: ./audio-service
-    container_name: xarvis-audio
-    ports:
-      - "5005:5005"
-    volumes:
-      - ./audio-service/data:/app/data
+  # ───────────────────────── Reverse Proxy (routes /v1/*) ─────────────────────────
+  traefik:
+    profiles: [ "proxy" ]
+    image: traefik:v3.1
     restart: unless-stopped
-
-  memory-service:
-    image: qdrant/qdrant:v1.3.0
-    container_name: xarvis-memory
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--entrypoints.web.address=:80"
     ports:
-      - "6333:6333"
-    volumes:
-      - ./memory-service/qdrant:/qdrant/storage
-    environment:
-      - QDRANT__SERVICE__GRPC_PORT=6334
-      - QDRANT__SERVICE__HTTP_PORT=6333
+      - "80:80"
+      - "8081:8080" # dashboard
+    networks: [ edge, backend ]
+    healthcheck:
+      test: [ "CMD", "wget", "-qO-", "http://localhost:8080/api/rawdata" ]
+      <<: *health
+    labels:
+      - "traefik.enable=true"
 
+  # ───────────────────────── Xarvis Core (Go) ─────────────────────────
+  xarvis-core:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    # No littered envs: the app reads config/config.yaml + .env via Viper
+    environment:
+      XARVIS_CONFIG: /etc/xarvis/config.yaml
+    volumes:
+      - ./config:/etc/xarvis:ro # mounts config.yaml + optional .env
+    depends_on:
+      - mosquitto
+    networks: [ backend ]
+    ports: [ "8088:8088" ]
+    healthcheck:
+      test: [ "CMD", "wget", "-qO-", "http://localhost:8088/health" ]
+      <<: *health
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.xarvis.rule=PathPrefix(`/v1/app`)"
+      - "traefik.http.routers.xarvis.entrypoints=web"
+      - "traefik.http.services.xarvis.loadbalancer.server.port=8088"
+      - "traefik.http.middlewares.xarvis-strip.stripprefix.prefixes=/v1/app"
+      - "traefik.http.routers.xarvis.middlewares=xarvis-strip@docker"
+
+  # ───────────────────────── Messaging (ESP audio/control) ─────────────────────────
   mosquitto:
-    image: eclipse-mosquitto:2.0
-    container_name: xarvis-mqtt
+    image: eclipse-mosquitto:2
+    restart: unless-stopped
+    networks: [ backend, edge ]
     ports:
       - "1883:1883"
-      - "9001:9001" # MQTT WebSocket
+      - "9001:9001"
     volumes:
-      - ./mqtt-broker/config:/mosquitto/config
-      - ./mqtt-broker/data:/mosquitto/data
-      - ./mqtt-broker/log:/mosquitto/log
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+      - ./infra/mosquitto:/mosquitto/config
+    healthcheck:
+      test: [ "CMD-SHELL", "mosquitto -c /mosquitto/config/mosquitto.conf -p 0 -v >/dev/null 2>&1 || exit 0" ]
+      <<: *health
+    labels:
+      - "traefik.enable=false"
+
+  # ───────────────────────── Voice (opt-in with --profile voice) ─────────────────────────
+  stt-whisper:
+    profiles: [ "voice" ]
+    image: ghcr.io/ggerganov/whisper.cpp:server
+    command: [ "./server", "-m", "/models/ggml-base.en.bin", "-l", "auto", "-t", "4" ]
+    networks: [ backend ]
+    ports: [ "8080:8080" ]
+    volumes:
+      - ./models/whisper:/models:ro
+    healthcheck:
+      test: [ "CMD", "wget", "-qO-", "http://localhost:8080/health" ]
+      <<: *health
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.stt.rule=PathPrefix(`/v1/stt`)"
+      - "traefik.http.routers.stt.entrypoints=web"
+      - "traefik.http.services.stt.loadbalancer.server.port=8080"
+      - "traefik.http.middlewares.stt-strip.stripprefix.prefixes=/v1/stt"
+      - "traefik.http.routers.stt.middlewares=stt-strip@docker"
+
+  tts-piper:
+    profiles: [ "voice" ]
+    image: rhasspy/piper
+    environment:
+      PIPER_VOICE: en_US-lessac-medium
+    networks: [ backend ]
+    ports: [ "5002:5002" ]
+    volumes:
+      - ./infra/piper:/data:ro
+    healthcheck:
+      test: [ "CMD", "wget", "-qO-", "http://localhost:5002/api/health" ]
+      <<: *health
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.tts.rule=PathPrefix(`/v1/tts`)"
+      - "traefik.http.routers.tts.entrypoints=web"
+      - "traefik.http.services.tts.loadbalancer.server.port=5002"
+      - "traefik.http.middlewares.tts-strip.stripprefix.prefixes=/v1/tts"
+      - "traefik.http.routers.tts.middlewares=tts-strip@docker"
+
+  # ───────────────────────── Local LLMs & Embeddings (opt-in with --profile ai-local) ─────────────────────────
+  ollama:
+    profiles: [ "ai-local" ]
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    networks: [ backend ]
+    ports: [ "11434:11434" ]
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: [ "CMD", "wget", "-qO-", "http://localhost:11434/api/tags" ]
+      <<: *health
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ollama.rule=PathPrefix(`/v1/llm/ollama`)"
+      - "traefik.http.routers.ollama.entrypoints=web"
+      - "traefik.http.services.ollama.loadbalancer.server.port=11434"
+      - "traefik.http.middlewares.ollama-strip.stripprefix.prefixes=/v1/llm/ollama"
+      - "traefik.http.routers.ollama.middlewares=ollama-strip@docker"
+
+  embeddings-tei:
+    profiles: [ "ai-local" ]
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.5
+    environment:
+      MODEL_ID: mixedbread-ai/mxbai-embed-large-v1
+      NUM_SHARD: "1"
+    networks: [ backend ]
+    ports: [ "8081:80" ]
+    volumes:
+      - tei_data:/data
+    healthcheck:
+      test: [ "CMD", "wget", "-qO-", "http://localhost:80/health" ]
+      <<: *health
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.embed.rule=PathPrefix(`/v1/embed`)"
+      - "traefik.http.routers.embed.entrypoints=web"
+      - "traefik.http.services.embed.loadbalancer.server.port=80"
+      - "traefik.http.middlewares.embed-strip.stripprefix.prefixes=/v1/embed"
+      - "traefik.http.routers.embed.middlewares=embed-strip@docker"
+
+  # ───────────────────────── Optional Vector Backend: Qdrant ─────────────────────────
+  qdrant:
+    profiles: [ "vector-qdrant" ]
+    image: qdrant/qdrant:latest
+    restart: unless-stopped
+    networks: [ backend ]
+    ports: [ "6333:6333" ]
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: [ "CMD", "wget", "-qO-", "http://localhost:6333/readyz" ]
+      <<: *health
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.qdrant.rule=PathPrefix(`/v1/vector`)"
+      - "traefik.http.routers.qdrant.entrypoints=web"
+      - "traefik.http.services.qdrant.loadbalancer.server.port=6333"
+      - "traefik.http.middlewares.qdrant-strip.stripprefix.prefixes=/v1/vector"
+      - "traefik.http.routers.qdrant.middlewares=qdrant-strip@docker"
+
+  # ───────────────────────── Local TiDB for dev (Serverless uses DSN; no container) ─────────────────────────
+  tidb-local:
+    profiles: [ "tidb-local" ]
+    image: pingcap/tidb:latest
+    command: [ "--store=unistore", "--path=127.0.0.1:0" ]
+    networks: [ backend ]
+    ports:
+      - "4000:4000" # MySQL protocol
+      - "10080:10080" # status
+    healthcheck:
+      test: [ "CMD", "wget", "-qO-", "http://localhost:10080/status" ]
+      <<: *health

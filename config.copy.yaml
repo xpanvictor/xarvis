@@ -1,0 +1,46 @@
+env: "dev"
+debug: true
+
+database:                
+  host: "tidb-local"    
+  port: 4000
+  username: "root"
+  password: ""           
+  name: "xarvis"
+  pool_size: 10
+
+storage:
+  vector_backend: "tidb"   # "tidb" or "qdrant"
+  qdrant_url: "http://qdrant:6333"
+
+mqtt:
+  broker_url: "mqtt://mosquitto:1883"
+  ws_url: "ws://mosquitto:9001"
+  client_id_prefix: "xarvis-esp"
+
+brainConfig:
+  max_tool_call_limit: 2
+  think_budget_ms: 2000
+  rag_topk: 20
+  rag_rerank: 5
+
+assistantKeys:
+  open_ai_api_key: ""      # leave empty here; supply via .env
+
+modelRouter:
+  defaults:
+    chat: "openai:gpt-4o-mini"
+    rag_synth: "ollama:llama3.1:8b-instruct"
+    embed: "tei:mxbai-embed-large-v1"
+  providers:
+    openai:
+      base_url: ""         # empty = vendor default
+      api_key_env: "OPENAI_API_KEY"
+    ollama:
+      base_url: "http://ollama:11434"
+    tei:
+      base_url: "http://embeddings-tei:80"
+
+voice:
+  stt_url: "http://stt-whisper:8080"
+  tts_url: "http://tts-piper:5002"

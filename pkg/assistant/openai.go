@@ -40,6 +40,7 @@ func (o openAIAssistant) ProcessPrompt(
 			CreatedAt: time.Now(),
 			MsgRole:   ASSISTANT,
 		},
+		// TODO: tool parsing
 		ToolCalls: make([]ToolCall, 0),
 	}, nil
 }
