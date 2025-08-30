@@ -1,9 +1,10 @@
 package config
 
 import (
-	"fmt"
+    "fmt"
+    "os"
 
-	"github.com/spf13/viper"
+    "github.com/spf13/viper"
 )
 
 type DBConfig struct {
@@ -16,12 +17,18 @@ type DBConfig struct {
 }
 
 func (d DBConfig) DSN() string {
-	return fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
-		d.Host, d.Port, d.Username, d.Password, d.Name)
+    // MySQL/TiDB DSN
+    // username:password@tcp(host:port)/dbname?params
+    if d.Password == "" {
+        return fmt.Sprintf("%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+            d.Username, d.Host, d.Port, d.Name)
+    }
+    return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+        d.Username, d.Password, d.Host, d.Port, d.Name)
 }
 
 type AssistantKeysObj struct {
-	OpenAiApiKey string `mapstructure:"open_ai_api_key`
+    OpenAiApiKey string `mapstructure:"open_ai_api_key"`
 }
 
 type BrainConfig struct {
@@ -37,14 +44,21 @@ type Settings struct {
 }
 
 func Load() (*Settings, error) {
-	// Load settings from a configuration file or environment variables
-	viper.SetConfigName("config_" + genEnv())
-	viper.AddConfigPath(".")
-	viper.SetConfigType("yaml")
+    // Prefer explicit config file via env var
+    if cfgPath := os.Getenv("XARVIS_CONFIG"); cfgPath != "" {
+        viper.SetConfigFile(cfgPath)
+    } else {
+        // Load settings from conventional locations: current dir, ./config, /etc/xarvis
+        viper.SetConfigName("config_" + genEnv())
+        viper.SetConfigType("yaml")
+        viper.AddConfigPath(".")
+        viper.AddConfigPath("./config")
+        viper.AddConfigPath("/etc/xarvis")
+    }
 
-	if err := viper.ReadInConfig(); err != nil {
-		return nil, fmt.Errorf("failed to read config: %w", err)
-	}
+    if err := viper.ReadInConfig(); err != nil {
+        return nil, fmt.Errorf("failed to read config: %w", err)
+    }
 
 	var settings Settings
 	if err := viper.Unmarshal(&settings); err != nil {

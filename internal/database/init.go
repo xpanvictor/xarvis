@@ -1,18 +1,18 @@
 package database
 
 import (
-	"fmt"
-	"time"
+    "fmt"
+    "time"
 
-	"github.com/xpanvictor/xarvis/internal/config"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
+    "github.com/xpanvictor/xarvis/internal/config"
+    "gorm.io/driver/mysql"
+    "gorm.io/gorm"
 )
 
 func InitDB(cfg *config.Settings) (*gorm.DB, error) {
-	db, err := gorm.Open(postgres.Open(cfg.DB.DSN()), &gorm.Config{
-		// Configure GORM with the provided settings
-	})
+    db, err := gorm.Open(mysql.Open(cfg.DB.DSN()), &gorm.Config{
+        // Configure GORM with the provided settings
+    })
 	if err != nil {
 		// Handle error
 		return nil, fmt.Errorf("failed to connect to database: %w", err)

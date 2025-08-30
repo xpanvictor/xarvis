@@ -1,0 +1,23 @@
+# Air config for live-reload during development
+root = "."
+tmp_dir = ".air"
+
+[build]
+  cmd = "go build -o /tmp/api ./cmd/api/main.go"
+  bin = "/tmp/api"
+  full_bin = "/tmp/api"
+  include_ext = ["go", "mod", "sum", "yaml", "yml"]
+  exclude_dir = [".git", ".air", "bin", "vendor"]
+  stop_on_error = true
+
+[log]
+  time = true
+
+[misc]
+  clean_on_exit = true
+
+[color]
+  main = "cyan"
+  watcher = "yellow"
+  build = "green"
+  runner = "magenta"

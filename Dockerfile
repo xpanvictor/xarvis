@@ -19,8 +19,31 @@ COPY . .
 # Build API binary
 RUN go build -o bin/api ./cmd/api/main.go
 
-# Build Worker binary
-RUN go build -o bin/worker ./cmd/worker/main.go
+# Note: No worker binary in this repo; skip building worker
+
+# Stage 1.5: Dev with hot reload (Air)
+FROM golang:1.23.4-alpine AS dev
+
+ENV CGO_ENABLED=0 \
+    GOOS=linux \
+    GOARCH=amd64
+
+WORKDIR /app
+
+# Install dev tools (Air)
+RUN apk add --no-cache git curl && \
+    go install github.com/air-verse/air@latest
+
+# Cache deps first
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Bring in source (overridden by bind-mount in docker-compose dev)
+COPY . .
+
+EXPOSE 8088 9090
+
+CMD ["/go/bin/air", "-c", ".air.toml"]
 
 # Stage 2: Minimal runtime
 FROM alpine:latest

@@ -43,12 +43,14 @@ services:
     build:
       context: ./
       dockerfile: Dockerfile
+      target: dev
     restart: unless-stopped
-    # No littered envs: the app reads config/config.yaml + .env via Viper
     environment:
-      XARVIS_CONFIG: /etc/xarvis/config.yaml
+      # In dev, read config from the repo root
+      XARVIS_CONFIG: /app/config_dev.yaml
     volumes:
-      - ./config:/etc/xarvis:ro # mounts config.yaml + optional .env
+      # Live-reload: bind mount source into /app for Air
+      - ./:/app
     depends_on:
       - mosquitto
     networks: [ backend ]

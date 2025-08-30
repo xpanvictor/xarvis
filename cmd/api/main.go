@@ -1,13 +1,14 @@
 package main
 
 import (
-	"context"
-	"log"
-	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
+    "context"
+    "log"
+    "net/http"
+    "os"
+    "os/signal"
+    "strconv"
+    "syscall"
+    "time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/xpanvictor/xarvis/internal/config"
@@ -43,11 +44,18 @@ func main() {
 	)
 	server.InitializeRoutes(router, dep)
 
-	// listen with graceful exist
-	srv := &http.Server{
-		Addr:    ":0",
-		Handler: router.Handler(),
-	}
+    // listen with graceful exit on configured port (default 8088)
+    port := 8088
+    if p := os.Getenv("PORT"); p != "" {
+        if v, err := strconv.Atoi(p); err == nil {
+            port = v
+        }
+    }
+    addr := ":" + strconv.Itoa(port)
+    srv := &http.Server{
+        Addr:    addr,
+        Handler: router.Handler(),
+    }
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Fatalf("Server existing %v", err)
