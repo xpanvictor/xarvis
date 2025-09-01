@@ -148,7 +148,7 @@ services:
     networks: [ backend ]
     ports: [ "11434:11434" ]
     volumes:
-      - ollama_data:/root/.ollama
+      - ./infra/models/ollama:/root/.ollama
     healthcheck:
       test: [ "CMD", "wget", "-qO-", "http://localhost:11434/api/tags" ]
       <<: *health
@@ -162,12 +162,13 @@ services:
 
   embeddings-tei:
     profiles: [ "ai-local" ]
+    platform: linux/amd64 # uncomment on Apple Silicon if needed
     image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.5
     environment:
       MODEL_ID: mixedbread-ai/mxbai-embed-large-v1
       NUM_SHARD: "1"
     networks: [ backend ]
-    ports: [ "8081:80" ]
+    ports: [ "8082:80" ]
     volumes:
       - tei_data:/data
     healthcheck:

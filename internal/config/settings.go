@@ -1,39 +1,50 @@
 package config
 
 import (
-    "fmt"
-    "os"
+	"fmt"
+	"os"
 
-    "github.com/spf13/viper"
+	"github.com/spf13/viper"
 )
 
 type DBConfig struct {
-    Host     string `mapstructure:"host"`
-    Port     int    `mapstructure:"port"`
-    Username string `mapstructure:"username"`
-    Password string `mapstructure:"password"`
-    Name     string `mapstructure:"name"`
-    PoolSize int    `mapstructure:"pool_size"`
-    TLS      bool   `mapstructure:"tls"`
+	Host     string `mapstructure:"host"`
+	Port     int    `mapstructure:"port"`
+	Username string `mapstructure:"username"`
+	Password string `mapstructure:"password"`
+	Name     string `mapstructure:"name"`
+	PoolSize int    `mapstructure:"pool_size"`
+	TLS      bool   `mapstructure:"tls"`
 }
 
 func (d DBConfig) DSN() string {
-    // MySQL/TiDB DSN
-    // username:password@tcp(host:port)/dbname?params
-    base := "charset=utf8mb4&parseTime=True&loc=Local"
-    if d.TLS {
-        base += "&tls=true"
-    }
-    if d.Password == "" {
-        return fmt.Sprintf("%s@tcp(%s:%d)/%s?%s",
-            d.Username, d.Host, d.Port, d.Name, base)
-    }
-    return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?%s",
-        d.Username, d.Password, d.Host, d.Port, d.Name, base)
+	// MySQL/TiDB DSN
+	// username:password@tcp(host:port)/dbname?params
+	base := "charset=utf8mb4&parseTime=True&loc=Local"
+	if d.TLS {
+		base += "&tls=true"
+	}
+	if d.Password == "" {
+		return fmt.Sprintf("%s@tcp(%s:%d)/%s?%s",
+			d.Username, d.Host, d.Port, d.Name, base)
+	}
+	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?%s",
+		d.Username, d.Password, d.Host, d.Port, d.Name, base)
 }
 
+type LLMModelConfig struct {
+	Name     string
+	Url      string
+	Password string
+	// others
+}
+
+type OllamaConfig struct {
+	LLamaModels []LLMModelConfig
+}
 type AssistantKeysObj struct {
-    OpenAiApiKey string `mapstructure:"open_ai_api_key"`
+	OpenAiApiKey      string `mapstructure:"open_ai_api_key"`
+	OllamaCredentials OllamaConfig
 }
 
 type BrainConfig struct {
@@ -49,21 +60,21 @@ type Settings struct {
 }
 
 func Load() (*Settings, error) {
-    // Prefer explicit config file via env var
-    if cfgPath := os.Getenv("XARVIS_CONFIG"); cfgPath != "" {
-        viper.SetConfigFile(cfgPath)
-    } else {
-        // Load settings from conventional locations: current dir, ./config, /etc/xarvis
-        viper.SetConfigName("config_" + genEnv())
-        viper.SetConfigType("yaml")
-        viper.AddConfigPath(".")
-        viper.AddConfigPath("./config")
-        viper.AddConfigPath("/etc/xarvis")
-    }
+	// Prefer explicit config file via env var
+	if cfgPath := os.Getenv("XARVIS_CONFIG"); cfgPath != "" {
+		viper.SetConfigFile(cfgPath)
+	} else {
+		// Load settings from conventional locations: current dir, ./config, /etc/xarvis
+		viper.SetConfigName("config_" + genEnv())
+		viper.SetConfigType("yaml")
+		viper.AddConfigPath(".")
+		viper.AddConfigPath("./config")
+		viper.AddConfigPath("/etc/xarvis")
+	}
 
-    if err := viper.ReadInConfig(); err != nil {
-        return nil, fmt.Errorf("failed to read config: %w", err)
-    }
+	if err := viper.ReadInConfig(); err != nil {
+		return nil, fmt.Errorf("failed to read config: %w", err)
+	}
 
 	var settings Settings
 	if err := viper.Unmarshal(&settings); err != nil {

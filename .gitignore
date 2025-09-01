@@ -11,3 +11,30 @@ generated/
 
 # config files
 config_*.yaml
+
+# model files - exclude heavy model files but keep structure
+*.onnx
+*.bin
+*.gguf
+*.safetensors
+*.pt
+*.pth
+*.model
+*.pkl
+*.h5
+
+# infra - exclude heavy data but keep folder structure
+infra/models/*/
+infra/piper/models/*/
+infra/ollama/models/
+data/ollama/models/
+data/*/
+
+# Keep folder structure by adding exceptions
+!infra/models/.gitkeep
+!infra/piper/models/.gitkeep
+!data/.gitkeep
+!data/ollama/.gitkeep
+
+# Still exclude everything under infra/_/
+# infra/_/*
