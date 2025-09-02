@@ -19,9 +19,9 @@ type ollamaAdapter struct {
 }
 
 // DrainBuffer implements adapters.ContractAdapter.
-func (o ollamaAdapter) DrainBuffer(ch adapters.ContractResponseChannel) bool {
+func (o *ollamaAdapter) DrainBuffer(ch adapters.ContractResponseChannel) bool {
 	ch <- o.msgBuffer
-	// todo: clear buffer
+	o.msgBuffer = make([]adapters.ContractResponseDelta, o.cfg.DeltaBufferLimit)
 	return true
 }
 
@@ -66,7 +66,7 @@ func (o ollamaAdapter) ConvertMsgBackward(msgs []api.ChatResponse) []adapters.Co
 }
 
 // Process implements adapters.ContractAdapter.
-func (o ollamaAdapter) Process(ctx context.Context, input adapters.ContractInput, rc *adapters.ContractResponseChannel) adapters.ContractResponse {
+func (o *ollamaAdapter) Process(ctx context.Context, input adapters.ContractInput, rc *adapters.ContractResponseChannel) adapters.ContractResponse {
 	genID, err := uuid.NewUUID()
 	if err != nil {
 		panic("unimpl")
@@ -129,7 +129,7 @@ func New(
 	cfg adapters.ContractLLMCfg,
 	defaultResponseChannel *adapters.ContractResponseChannel,
 ) adapters.ContractAdapter {
-	return ollamaAdapter{
+	return &ollamaAdapter{
 		op:        provider,
 		cfg:       cfg,
 		msgBuffer: make([]adapters.ContractResponseDelta, cfg.DeltaBufferLimit),
