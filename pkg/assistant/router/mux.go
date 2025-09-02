@@ -25,9 +25,8 @@ func (m *Mux) Stream(
 ) {
 	sm := m.RouterPolicy.Select(input)
 	// handle input
-	handlerAdapterPack := m.AdapterMap[GenerateModelName(sm)]
 	input.HandlerModel = sm
-	out := handlerAdapterPack.Adapter.Process(ctx, input, rc)
+	out := m.AdapterMap[GenerateModelName(sm)].Adapter.Process(ctx, input, rc)
 	if out.Error != nil {
 		panic("unimpl error here")
 	}
