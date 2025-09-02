@@ -7,7 +7,7 @@ request and response.
 Adapter layer wraps around providing n-1 for contract types.
 
 ## Components 
-- Stream
+- Stream (output)
 - Complete (stream/single)
 - ToolCall
 - Response json. (To be supported later)
@@ -15,4 +15,10 @@ Adapter layer wraps around providing n-1 for contract types.
 ## Breakdown
 Takes in `AssistantInput` and returns `AssistantOutputStream`.
 Stream can be actual stream or all response at once. 
+while
+	ctx not done & buffer not full & !bufferTimeout
+	buffer stream else insert into stream
+	but controlled (little 100ms rebounce)
+- Model should be time conscious.
+
 

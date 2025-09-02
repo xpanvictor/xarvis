@@ -37,11 +37,17 @@ type ContractTool struct {
 	ToolFunction ContractToolFn
 }
 
+type ContractSelectedModel struct {
+	Name    string
+	Version uint
+}
+
 type ContractInput struct {
-	ID       uuid.UUID
-	ToolList []ContractTool
-	Meta     any // json serialized
-	Msg      ContractMessage
+	ID           uuid.UUID
+	ToolList     []ContractTool
+	Meta         any // json serialized
+	Msgs         []ContractMessage
+	HandlerModel ContractSelectedModel
 }
 
 type ContractToolCall struct {
@@ -53,10 +59,19 @@ type ContractToolCall struct {
 
 // response is by default a stream
 type ContractResponseDelta struct {
-	ID        uuid.UUID
 	Msg       *ContractMessage
 	ToolCalls *[]ContractToolCall
+	Error     error
 	Index     uint
 	Done      bool
+	CreatedAt time.Time
+}
+
+type ContractResponseChannel chan []ContractResponseDelta
+
+type ContractResponse struct {
+	ID        uuid.UUID
 	StartedAt time.Time
+	Error     error
+	Done      bool
 }
