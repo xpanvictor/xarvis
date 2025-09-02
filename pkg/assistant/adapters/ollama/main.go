@@ -72,12 +72,13 @@ func (o *ollamaAdapter) Process(ctx context.Context, input adapters.ContractInpu
 		panic("unimpl")
 	}
 	startedAt := time.Now()
+	stream := true
 	// construct ollama req
 	model := input.HandlerModel
 	req := api.ChatRequest{
 		Model:    fmt.Sprintf("%v%v", model.Name, model.Version),
 		Messages: o.ConvertMsgs(input.Msgs),
-		// Stream:   true,
+		Stream:   &stream,
 	}
 	// construct handler
 	var handlerChannel *adapters.ContractResponseChannel
