@@ -87,7 +87,7 @@ func (o *ollamaAdapter) Process(ctx context.Context, input adapters.ContractInpu
 	} else if o.drc != nil {
 		handlerChannel = o.drc
 	} else {
-		panic("no input channel for ollama adapter provided")
+		panic("hndl error: no input channel for ollama adapter provided")
 	}
 	var handler api.ChatResponseFunc = func(cr api.ChatResponse) error {
 		msg := o.ConvertMsgBackward([]api.ChatResponse{cr})[0]
