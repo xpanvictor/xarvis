@@ -2,7 +2,10 @@ package memoryregistry
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/xpanvictor/xarvis/pkg/io/device"
@@ -37,8 +40,15 @@ func (m *mmrRegistry) DetachEndpoint(userID uuid.UUID, deviceID uuid.UUID, ep de
 }
 
 // FetchTextFanoutEndpoint implements registry.Registry.
-func (m *mmrRegistry) FetchTextFanoutEndpoint(userID uuid.UUID) ([]*device.Endpoint, bool) {
-	panic("unimplemented")
+func (m *mmrRegistry) FetchTextFanoutEndpoint(userID uuid.UUID) ([]device.Endpoint, bool) {
+	if userDevices, exists := m.dvMap[userID]; exists {
+		ue := make([]device.Endpoint, 0)
+		for _, d := range userDevices {
+			ue = append(ue, slices.Collect(maps.Values(d.Endpoints))...)
+		}
+		return ue, true
+	}
+	return nil, false
 }
 
 // ListUserDevices implements registry.Registry.
@@ -56,9 +66,38 @@ func (m *mmrRegistry) RemoveDevice(userID uuid.UUID, deviceID uuid.UUID) error {
 	panic("unimplemented")
 }
 
+func (m *mmrRegistry) TouchDevice(userID uuid.UUID, deviceID uuid.UUID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if userMap, exists := m.dvMap[userID]; exists {
+		if d, exists := userMap[deviceID]; exists {
+			d.LastActive = time.Now()
+			// touch all endpoints
+			for _, e := range d.Endpoints {
+				e.Touch()
+			}
+		}
+	}
+	return fmt.Errorf("can't find user")
+}
+
 // SelectEndpointWithMRU implements registry.Registry.
-func (m *mmrRegistry) SelectEndpointWithMRU(userID uuid.UUID) (*device.Endpoint, bool) {
-	panic("unimplemented")
+// todo: efficiency: rebalancing tree instead
+func (m *mmrRegistry) SelectEndpointWithMRU(userID uuid.UUID) (device.Endpoint, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if userMap, exists := m.dvMap[userID]; exists {
+		devices := slices.SortedFunc(maps.Values(userMap), func(a, b *device.Device) int { return a.LastActive.Compare(b.LastActive) })
+		if len(devices) > 0 {
+			if mrd := devices[0]; mrd != nil {
+				se := slices.SortedFunc(maps.Values(mrd.Endpoints), func(a, b device.Endpoint) int { return a.LastActive().Compare(b.LastActive()) })
+				if len(se) > 0 {
+					return se[0], true
+				}
+			}
+		}
+	}
+	return nil, false
 }
 
 // UpsertDevice implements registry.Registry.

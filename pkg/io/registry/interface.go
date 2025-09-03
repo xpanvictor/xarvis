@@ -9,6 +9,7 @@ type Registry interface {
 	// device lifecyle
 	UpsertDevice(userID uuid.UUID, d device.Device) error
 	RemoveDevice(userID uuid.UUID, deviceID uuid.UUID) error
+	TouchDevice(userID uuid.UUID, deviceID uuid.UUID) error
 	// endpoint lifecycle
 	AttachEndpoint(userID uuid.UUID, deviceID uuid.UUID, ep device.Endpoint) error
 	DetachEndpoint(userID uuid.UUID, deviceID uuid.UUID, ep device.Endpoint) device.EndpointID
@@ -16,6 +17,6 @@ type Registry interface {
 	ListUserDevices(userID uuid.UUID) []device.Device
 	ListUserEndpoints(userID uuid.UUID) []device.Endpoint
 	// selection
-	SelectEndpointWithMRU(userID uuid.UUID) (*device.Endpoint, bool)
-	FetchTextFanoutEndpoint(userID uuid.UUID) ([]*device.Endpoint, bool)
+	SelectEndpointWithMRU(userID uuid.UUID) (device.Endpoint, bool)
+	FetchTextFanoutEndpoint(userID uuid.UUID) ([]device.Endpoint, bool)
 }

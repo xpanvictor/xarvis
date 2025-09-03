@@ -30,6 +30,10 @@ func (w *wsEndpoint) ID() device.EndpointID {
 	return device.EndpointID(w.id)
 }
 
+func (w *wsEndpoint) Touch() {
+	w.lastActive = time.Now()
+}
+
 // IsAlive implements device.Endpoint.
 // todo: uses ping pong approach
 func (w *wsEndpoint) IsAlive() bool {

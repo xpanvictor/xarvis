@@ -37,6 +37,7 @@ type Endpoint interface {
 	SendTextDelta(sessionID uuid.UUID, seq int, text string) error
 	SendAudioFrame(sessionID uuid.UUID, frame []byte) error
 	SendEvent(sessionID uuid.UUID, name string, payload any) error
+	Touch()
 	// lifecyle
 	IsAlive() bool
 	Close() error
