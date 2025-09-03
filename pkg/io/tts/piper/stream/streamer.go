@@ -29,6 +29,10 @@ type Streamer struct {
 	FadeMs int // add ~5–10ms fade-in/out at boundaries to avoid clicks
 }
 
+func New(tts *piper.Piper) Streamer {
+	return Streamer{TTS: tts}
+}
+
 // Input is a stream of text deltas (already detokenized).
 // Returns a single io.ReadCloser with continuous audio.
 func (s *Streamer) FromDeltas(ctx context.Context, deltas <-chan string) (io.ReadCloser, error) {

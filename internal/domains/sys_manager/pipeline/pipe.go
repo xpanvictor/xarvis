@@ -17,6 +17,13 @@ type Pipeline struct {
 	pub *xio.Publisher   // abstracts MQTT/WS publishing
 }
 
+func New(str *stream.Streamer, pub *xio.Publisher) Pipeline {
+	return Pipeline{
+		str: str,
+		pub: pub,
+	}
+}
+
 // Broadcast consumes LLM deltas, streams audio frames, and publishes text deltas.
 func (p *Pipeline) Broadcast(
 	ctx context.Context,

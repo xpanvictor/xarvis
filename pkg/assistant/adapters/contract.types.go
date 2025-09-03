@@ -39,7 +39,7 @@ type ContractTool struct {
 
 type ContractSelectedModel struct {
 	Name    string
-	Version uint
+	Version string
 }
 
 type ContractInput struct {

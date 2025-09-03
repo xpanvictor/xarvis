@@ -7,11 +7,41 @@ import (
 	"github.com/xpanvictor/xarvis/pkg/assistant/adapters"
 )
 
+type DefaultRP struct{}
+
+func (*DefaultRP) Select(input adapters.ContractInput) adapters.ContractSelectedModel {
+	return adapters.ContractSelectedModel{
+		Name:    "llama",
+		Version: "3:8b",
+	}
+}
+
 // todo: new
-// Takes in providers
+// Takes in adapters
 // Returns Multiplexer
-func New() Mux {
-	return Mux{}
+func New(
+	ads []adapters.ContractAdapter,
+) Mux {
+	adm := make(map[string]AdapterPack)
+	drp := &DefaultRP{}
+	dn := adapters.ContractSelectedModel{
+		Name:    "llama",
+		Version: "3:8b",
+	}
+
+	for _, ad := range ads {
+		name := GenerateModelName(dn)
+		adm[name] = AdapterPack{
+			Name:         name,
+			Adapter:      ad,
+			DefaultModel: dn,
+		}
+	}
+
+	return Mux{
+		RouterPolicy: drp,
+		AdapterMap:   adm,
+	}
 }
 
 func GenerateModelName(m adapters.ContractSelectedModel) string {

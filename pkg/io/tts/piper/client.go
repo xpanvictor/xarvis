@@ -20,6 +20,10 @@ type Piper struct {
 	Timeout  time.Duration // request timeout per chunk
 }
 
+func New(bu string) Piper {
+	return Piper{BaseURL: bu}
+}
+
 type ttsReq struct {
 	Text      string      `json:"text"`
 	Voice     string      `json:"voice,omitempty"`
