@@ -106,7 +106,8 @@ services:
     volumes:
       - ./models/whisper:/models:ro
     healthcheck:
-      test: [ "CMD", "wget", "-qO-", "http://localhost:8080/health" ]
+      # Try wget, then curl (some minimal images lack one or the other)
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:8080/health || curl -fsS http://localhost:8080/health || exit 1" ]
       <<: *health
     labels:
       - "traefik.enable=true"
@@ -118,21 +119,25 @@ services:
 
   tts-piper:
     profiles: [ "voice" ]
-    image: lscr.io/linuxserver/piper:latest
+    image: rhasspy/wyoming-piper:latest
     # platform: linux/amd64  # uncomment on Apple Silicon if needed
+    command:
+      - --voice
+      - en_US-libritts-high
     environment:
       PUID: 1000
       PGID: 1000
       TZ: ${TZ:-Etc/UTC}
-      PIPER_VOICE: en_US-lessac-medium
+      PIPER_VOICE: en_US-libritts-high
     networks: [ backend ]
     # LinuxServer Piper exposes 10200 in-container; map to 5002 externally
-    ports: [ "5002:10200" ]
+    ports: [ "5002:10200", "5003:5000" ]
     volumes:
       - ./infra/piper:/config
       - ./infra/piper/models:/models
     healthcheck:
-      test: [ "CMD", "wget", "-qO-", "http://localhost:10200/api/health" ]
+      # Use short timeouts and fallback endpoints to avoid hangs
+      test: [ "CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/10200'" ]
       <<: *health
     labels:
       - "traefik.enable=true"

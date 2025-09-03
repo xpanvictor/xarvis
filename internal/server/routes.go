@@ -18,7 +18,8 @@ func NewServerDependencies(
 }
 
 func InitializeRoutes(r *gin.Engine, dep Dependencies) {
-    // setup services & handlers
-    r.GET("/", func(ctx *gin.Context) { ctx.JSON(200, gin.H{"message": "Server healthy"}) })
-    r.GET("/health", func(ctx *gin.Context) { ctx.JSON(200, gin.H{"status": "ok"}) })
+	// setup services & handlers
+	r.GET("/", func(ctx *gin.Context) { ctx.JSON(200, gin.H{"message": "Server healthy"}) })
+	r.GET("/health", func(ctx *gin.Context) { ctx.JSON(200, gin.H{"status": "ok"}) })
+	// quick ws test
 }
