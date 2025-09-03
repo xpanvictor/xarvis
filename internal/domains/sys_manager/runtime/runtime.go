@@ -36,7 +36,12 @@ func (ur *UserRuntime) GenerateFSM() *fsm.FSM {
 	return fsm.NewFSM(
 		string(currentState),
 		fsm.Events{
-			{Name: string(WAKE), Src: []string{string(AWAKE)}, Dst: string(AWAKE)},
+			{Name: string(WAKE), Src: []string{string(ASLEEP)}, Dst: string(AWAKE)},
+			// If triggered while acting, note to finish work
+			{Name: string(TRIGGER), Src: []string{
+				string(ASLEEP), string(AWAKE), string(THINKING),
+				string(ACTING), string(COOLDOWN), string(RESPONDING),
+			}, Dst: string(RESPONDING)},
 		},
 		fsm.Callbacks{},
 	)
