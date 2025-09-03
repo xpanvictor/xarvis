@@ -44,9 +44,14 @@ func (m *mmrRegistry) FetchTextFanoutEndpoint(userID uuid.UUID) ([]device.Endpoi
 	if userDevices, exists := m.dvMap[userID]; exists {
 		ue := make([]device.Endpoint, 0)
 		for _, d := range userDevices {
-			ue = append(ue, slices.Collect(maps.Values(d.Endpoints))...)
+			eps := slices.Collect(maps.Values(d.Endpoints))
+			for _, ep := range eps {
+				if ep.Caps().TextSink {
+					eps = append(eps, ep)
+				}
+			}
+			return ue, true
 		}
-		return ue, true
 	}
 	return nil, false
 }
@@ -114,7 +119,7 @@ func (m *mmrRegistry) UpsertDevice(userID uuid.UUID, d device.Device) error {
 	return nil
 }
 
-func New() registry.Registry {
+func New() registry.DeviceRegistry {
 	return &mmrRegistry{
 		dvMap: make(map[uuid.UUID]map[uuid.UUID]*device.Device, 0),
 	}

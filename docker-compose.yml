@@ -7,8 +7,10 @@ x-health: &health
   start_period: 20s
 
 networks:
-  edge: {}
-  backend: {}
+  edge:
+    name: xarvis_edge
+  backend:
+    name: xarvis_backend
 
 volumes:
   mosquitto_data:
@@ -27,7 +29,7 @@ services:
     command:
       - "--api.insecure=true"
       - "--providers.docker=true"
-      - "--providers.docker.network=backend"
+      - "--providers.docker.network=xarvis_backend"
       - "--entrypoints.web.address=:80"
     ports:
       - "80:80"
@@ -150,8 +152,14 @@ services:
     volumes:
       - ./infra/models/ollama:/root/.ollama
     healthcheck:
-      test: [ "CMD", "wget", "-qO-", "http://localhost:11434/api/tags" ]
-      <<: *health
+      # Use the built-in CLI to verify the API is responsive.
+      # Many minimal images lack wget/curl, causing false unhealthy states.
+      test: [ "CMD", "ollama", "list" ]
+      # Reuse common timings, but give the server extra warmup time.
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.ollama.rule=PathPrefix(`/v1/llm/ollama`)"

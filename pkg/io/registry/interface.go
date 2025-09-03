@@ -5,7 +5,7 @@ import (
 	"github.com/xpanvictor/xarvis/pkg/io/device"
 )
 
-type Registry interface {
+type DeviceRegistry interface {
 	// device lifecyle
 	UpsertDevice(userID uuid.UUID, d device.Device) error
 	RemoveDevice(userID uuid.UUID, deviceID uuid.UUID) error
