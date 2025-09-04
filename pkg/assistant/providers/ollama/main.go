@@ -3,6 +3,7 @@ package ollama
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"github.com/ollama/ollama/api"
 	"github.com/presbrey/ollamafarm"
@@ -22,7 +23,10 @@ func New(cfg config.OllamaConfig) OllamaProvider {
 	// register servers
 	for _, modelSrv := range cfg.LLamaModels {
 		// todo: group name and priority
-		farm.RegisterURL(modelSrv.Url, &ollamafarm.Properties{Group: ""})
+		err := farm.RegisterURL(modelSrv.Url.String(), nil)
+		if err != nil {
+			log.Printf("model-sk er %v", err)
+		}
 	}
 
 	return OllamaProvider{
@@ -36,12 +40,12 @@ func (o *OllamaProvider) Chat(
 	fn api.ChatResponseFunc,
 ) error {
 	// pick first available client
-	ollama := o.ollamafarm.First(&ollamafarm.Where{Model: req.Model})
+	ollama := o.ollamafarm.First(&ollamafarm.Where{Offline: false})
 	if ollama != nil {
-		ollama.Client().Chat(ctx, &req, fn)
+		return ollama.Client().Chat(ctx, &req, fn)
 	}
 	// error here
-	return fmt.Errorf("model not found")
+	return fmt.Errorf("model not found, %v", req.Model)
 }
 
 func (o *OllamaProvider) GetAvailableModels() []string {

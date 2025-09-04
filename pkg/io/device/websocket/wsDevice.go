@@ -1,4 +1,4 @@
-package websocket
+package websockete
 
 import (
 	"time"
@@ -49,9 +49,10 @@ func (w *wsEndpoint) LastActive() time.Time {
 
 // SendAudioFrame implements device.Endpoint.
 func (w *wsEndpoint) SendAudioFrame(sessionID uuid.UUID, frame []byte) error {
-	// prolly handle a few things first
-	// for now direct send
-	return w.client.WriteMessage(int(device.EAudio), frame)
+    // prolly handle a few things first
+    // for now direct send
+    // Send audio as binary frames to avoid UTF-8 enforcement on text frames
+    return w.client.WriteMessage(websocket.BinaryMessage, frame)
 }
 
 // SendEvent implements device.Endpoint.

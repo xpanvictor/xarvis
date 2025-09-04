@@ -47,7 +47,7 @@ func (m *mmrRegistry) FetchTextFanoutEndpoint(userID uuid.UUID) ([]device.Endpoi
 			eps := slices.Collect(maps.Values(d.Endpoints))
 			for _, ep := range eps {
 				if ep.Caps().TextSink {
-					eps = append(eps, ep)
+					ue = append(ue, ep)
 				}
 			}
 			return ue, true

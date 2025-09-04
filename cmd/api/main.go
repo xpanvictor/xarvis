@@ -42,7 +42,8 @@ func main() {
 	dep := server.NewServerDependencies(
 		repository.NewGormConversationRepo(db),
 	)
-	server.InitializeRoutes(router, dep)
+	logger.Info("llama", cfg.AssistantKeys.OllamaCredentials)
+	server.InitializeRoutes(cfg, router, dep)
 
 	// listen with graceful exit on configured port (default 8088)
 	port := 8088

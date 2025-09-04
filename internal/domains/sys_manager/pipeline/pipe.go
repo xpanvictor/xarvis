@@ -31,18 +31,18 @@ func (p *Pipeline) Broadcast(
 	sessionID uuid.UUID,
 	rc *adapters.ContractResponseChannel, // chan []AdapterOutput (pointer)
 ) error {
-	// 1) Channel for text deltas to the streamer. Buffered to reduce backpressure stalls.
+	// Channel for text deltas to the streamer. Buffered to reduce backpressure stalls.
 	wordCh := make(chan string, 64)
 
-	// 2) Start TTS streamer *before* feeding deltas, so audio reader is ready.
+	// Start TTS streamer *before* feeding deltas, so audio reader is ready.
 	audioRC, err := p.str.FromDeltas(ctx, wordCh)
 	if err != nil {
 		return err
 	}
 	defer audioRC.Close()
 
-	// 3) Stream audio bytes out as they arrive (no whole-clip buffering).
-	//    If your pub can take arbitrary sized frames, just chunk read into 8–32 KB.
+	//  Stream audio bytes out as they arrive (no whole-clip buffering).
+	//   just chunk read into 8–32 KB.
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -64,8 +64,8 @@ func (p *Pipeline) Broadcast(
 		}
 	}()
 
-	// 4) Pump LLM deltas -> publish text + forward to TTS.
-	//    Close wordCh when upstream closes so streamer can finish.
+	// Pump LLM deltas -> batch per tick, publish once, forward once to TTS.
+	// Close wordCh when upstream closes so streamer can finish.
 pumpLoop:
 	for {
 		select {
@@ -77,20 +77,27 @@ pumpLoop:
 				// upstream closed -> flush and end
 				break pumpLoop
 			}
-			for _, out := range outputs {
-				if msg := out.Msg; msg != nil && msg.Content != "" {
-					// publish text delta immediately
-					// todo: seq monitoring
-					_ = p.pub.SendTextDelta(ctx, userID, sessionID, 0, msg.Content)
-
-					// forward to TTS
-					select {
-					case wordCh <- msg.Content:
-					case <-ctx.Done():
-						break pumpLoop
-					}
-				}
-			}
+            // combine all text in this tick and track highest seq index
+            var batch string
+            var maxIdx uint
+            for _, out := range outputs {
+                if msg := out.Msg; msg != nil && msg.Content != "" {
+                    batch += msg.Content
+                    if out.Index > maxIdx {
+                        maxIdx = out.Index
+                    }
+                }
+            }
+            if batch != "" {
+                // publish combined text once with sequence for ordering on client
+                _ = p.pub.SendTextDelta(ctx, userID, sessionID, int(maxIdx), batch)
+                // forward combined text once to TTS
+                select {
+                case wordCh <- batch:
+                case <-ctx.Done():
+                    break pumpLoop
+                }
+            }
 		}
 	}
 

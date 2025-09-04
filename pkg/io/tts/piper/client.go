@@ -1,13 +1,12 @@
 package piper
 
 import (
-	"bytes"
-	"context"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-	"time"
+    "context"
+    "fmt"
+    "io"
+    "net/http"
+    "net/url"
+    "time"
 )
 
 type Piper struct {
@@ -24,15 +23,6 @@ func New(bu string) Piper {
 	return Piper{BaseURL: bu}
 }
 
-type ttsReq struct {
-	Text      string      `json:"text"`
-	Voice     string      `json:"voice,omitempty"`
-	SpeakerID *int        `json:"speaker_id,omitempty"`
-	Audio     interface{} `json:"audio,omitempty"` // map[string]any{"format":"wav","rate":16000,"channels":1}
-	// Optional: SSML if your server supports it
-	// Ssml bool `json:"ssml,omitempty"`
-}
-
 func (p *Piper) DoTTS(ctx context.Context, text string, optVoice string) (io.ReadCloser, string, error) {
 	if text == "" {
 		return nil, "", fmt.Errorf("empty text")
@@ -42,21 +32,24 @@ func (p *Piper) DoTTS(ctx context.Context, text string, optVoice string) (io.Rea
 		voice = optVoice
 	}
 
-	body, _ := json.Marshal(ttsReq{
-		Text:  text,
-		Voice: voice,
-		Audio: map[string]any{
-			"format":   ifEmpty(p.Format, "wav"),
-			"rate":     ifZero(p.Rate, 16000),
-			"channels": ifZero(p.Channels, 1),
-		},
-	})
+    // rhasspy/wyoming-piper HTTP: GET /api/text-to-speech?text=...&voice=...
+    // Note: This API streams a WAV body on success.
+    u, err := url.Parse(p.BaseURL + "/api/text-to-speech")
+    if err != nil {
+        return nil, "", err
+    }
+    q := u.Query()
+    q.Set("text", text)
+    if voice != "" {
+        q.Set("voice", voice)
+    }
+    u.RawQuery = q.Encode()
 
-	req, err := http.NewRequestWithContext(ctx, "POST", p.BaseURL+"/api/tts", bytes.NewReader(body))
-	if err != nil {
-		return nil, "", err
-	}
-	req.Header.Set("Content-Type", "application/json")
+    req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
+    if err != nil {
+        return nil, "", err
+    }
+    req.Header.Set("Accept", "audio/wav")
 
 	hc := p.Client
 	if hc == nil {
@@ -73,15 +66,16 @@ func (p *Piper) DoTTS(ctx context.Context, text string, optVoice string) (io.Rea
 	defer cancel()
 	req = req.WithContext(ctx2)
 
-	resp, err := hc.Do(req)
-	if err != nil {
-		return nil, "", err
-	}
-	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		return nil, "", fmt.Errorf("tts http %d: %s", resp.StatusCode, string(b))
-	}
+	start := time.Now()
+    resp, err := hc.Do(req)
+    if err != nil {
+        return nil, "", fmt.Errorf("tts http request failed: %w (url=%s)", err, u.String())
+    }
+    if resp.StatusCode != http.StatusOK {
+        b, _ := io.ReadAll(resp.Body)
+        resp.Body.Close()
+        return nil, "", fmt.Errorf("tts http %d: %s (url=%s, dur=%s)", resp.StatusCode, string(b), u.String(), time.Since(start))
+    }
 	// caller must Close the body
 	ct := resp.Header.Get("Content-Type") // e.g. audio/wav
 	return resp.Body, ct, nil

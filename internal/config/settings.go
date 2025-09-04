@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 
 	"github.com/spf13/viper"
@@ -34,7 +35,7 @@ func (d DBConfig) DSN() string {
 
 type LLMModelConfig struct {
 	Name     string
-	Url      string
+	Url      url.URL
 	Password string
 	// others
 }
