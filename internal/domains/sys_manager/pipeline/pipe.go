@@ -110,8 +110,16 @@ pumpLoop:
 
 	select {
 	case <-doneCh:
+		// Send completion event when everything is done
+		_ = p.pub.SendEvent(ctx, userID, sessionID, "message_complete", map[string]interface{}{
+			"timestamp": time.Now().Unix(),
+		})
 	case <-time.After(10 * time.Second):
 		// optional timeout to avoid hanging forever
+		_ = p.pub.SendEvent(ctx, userID, sessionID, "message_complete", map[string]interface{}{
+			"timestamp": time.Now().Unix(),
+			"timeout":   true,
+		})
 	}
 
 	return nil

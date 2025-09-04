@@ -41,10 +41,10 @@ func (o *ollamaAdapter) DrainBuffer(ch adapters.ContractResponseChannel) bool {
 	}
 }
 
+// available roles for ollama: system, role, assistant
 func (o ollamaAdapter) ConvertMsgs(msgs []adapters.ContractMessage) []api.Message {
 	var convertedMsgs []api.Message
 	for _, msg := range msgs {
-		log.Printf("Ini Q: %v", msg.Content)
 		convertedMsgs = append(
 			convertedMsgs, api.Message{
 				Role: string(msg.Role),

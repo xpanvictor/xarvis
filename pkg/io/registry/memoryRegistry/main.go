@@ -63,7 +63,18 @@ func (m *mmrRegistry) ListUserDevices(userID uuid.UUID) []device.Device {
 
 // ListUserEndpoints implements registry.Registry.
 func (m *mmrRegistry) ListUserEndpoints(userID uuid.UUID) []device.Endpoint {
-	panic("unimplemented")
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	
+	var endpoints []device.Endpoint
+	if userDevices, exists := m.dvMap[userID]; exists {
+		for _, d := range userDevices {
+			for _, ep := range d.Endpoints {
+				endpoints = append(endpoints, ep)
+			}
+		}
+	}
+	return endpoints
 }
 
 // RemoveDevice implements registry.Registry.

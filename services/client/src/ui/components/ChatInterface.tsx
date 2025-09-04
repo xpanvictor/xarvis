@@ -7,7 +7,7 @@ interface Message {
   content: string;
   role: 'user' | 'assistant';
   timestamp: Date;
-  audioChunks?: ArrayBuffer[];
+  audioChunks?: Blob[];
   isStreaming?: boolean;
 }
 
@@ -34,7 +34,9 @@ export const ChatInterface: React.FC = () => {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const currentMessageRef = useRef<string>('');
-  const audioChunksRef = useRef<ArrayBuffer[]>([]);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const currentAudioQueueRef = useRef<Blob[]>([]);
+  const isPlayingAudioRef = useRef(false);
   const currentMessageIdRef = useRef<string>('');
 
   const scrollToBottom = () => {
@@ -95,6 +97,7 @@ export const ChatInterface: React.FC = () => {
         }
       } else {
         // Handle binary messages (audio frames)
+        console.log('Received audio frame:', event.data, 'size:', event.data.byteLength || event.data.size);
         handleAudioFrame(event.data);
       }
     };
@@ -138,8 +141,13 @@ export const ChatInterface: React.FC = () => {
     }
   };
 
-  const handleAudioFrame = (audioData: ArrayBuffer) => {
+  const handleAudioFrame = (audioData: Blob) => {
+    console.log('handleAudioFrame called with:', audioData, 'current chunks count:', audioChunksRef.current.length + 1);
     audioChunksRef.current.push(audioData);
+
+    // Add to real-time queue and play immediately
+    currentAudioQueueRef.current.push(audioData);
+    playNextAudioChunk();
 
     // Update current message with audio chunks
     setMessages(prev => prev.map(msg =>
@@ -147,6 +155,46 @@ export const ChatInterface: React.FC = () => {
         ? { ...msg, audioChunks: [...audioChunksRef.current] }
         : msg
     ));
+  }; const playNextAudioChunk = async () => {
+    if (isPlayingAudioRef.current || currentAudioQueueRef.current.length === 0) {
+      return;
+    }
+
+    isPlayingAudioRef.current = true;
+    const chunk = currentAudioQueueRef.current.shift()!;
+
+    try {
+      console.log('Playing real-time audio chunk, size:', chunk.size, 'bytes');
+      const audioBlob = new Blob([chunk], { type: 'audio/wav' });
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(audioUrl);
+
+      await new Promise<void>((resolve, reject) => {
+        audio.onended = () => {
+          console.log('Real-time audio chunk finished');
+          URL.revokeObjectURL(audioUrl);
+          isPlayingAudioRef.current = false;
+          resolve();
+          // Play next chunk if available
+          setTimeout(() => playNextAudioChunk(), 50);
+        };
+
+        audio.onerror = (e) => {
+          console.error('Real-time audio chunk error:', e, audio.error);
+          URL.revokeObjectURL(audioUrl);
+          isPlayingAudioRef.current = false;
+          reject(e);
+        };
+
+        audio.play().catch(reject);
+      });
+
+    } catch (error) {
+      console.error('Error playing real-time audio chunk:', error);
+      isPlayingAudioRef.current = false;
+      // Continue with next chunk
+      setTimeout(() => playNextAudioChunk(), 100);
+    }
   };
 
   const handleEvent = (eventName: string, payload: any) => {
@@ -160,10 +208,8 @@ export const ChatInterface: React.FC = () => {
           : msg
       ));
 
-      // Play audio if available
-      if (audioChunksRef.current.length > 0) {
-        playAudioChunks(audioChunksRef.current);
-      }
+      // No need to play audio here since we're playing in real-time
+      console.log('Message complete, audio was played in real-time');
 
       setIsLoading(false);
       currentMessageRef.current = '';
@@ -171,25 +217,78 @@ export const ChatInterface: React.FC = () => {
     }
   };
 
-  const playAudioChunks = async (chunks: ArrayBuffer[]) => {
+  const playAudioChunks = async (chunks: Blob[]) => {
+    console.log('playAudioChunks called with', chunks.length, 'chunks');
+
+    if (chunks.length === 0) return;
+
     try {
-      // Combine all audio chunks into a single blob
-      const audioBlob = new Blob(chunks, { type: 'audio/wav' });
-      const audioUrl = URL.createObjectURL(audioBlob);
-      const audio = new Audio(audioUrl);
+      // Since each chunk is a separate WAV file from Piper TTS,
+      // we'll play them sequentially to maintain the streaming effect
+      for (let i = 0; i < chunks.length; i++) {
+        const chunk = chunks[i];
+        console.log(`Playing audio chunk ${i + 1}/${chunks.length}, size: ${chunk.size} bytes`);
 
-      await audio.play();
+        // Each chunk is already a complete WAV file
+        const audioBlob = new Blob([chunk], { type: 'audio/wav' });
+        const audioUrl = URL.createObjectURL(audioBlob);
 
-      // Clean up the URL after playing
-      audio.onended = () => {
-        URL.revokeObjectURL(audioUrl);
-      };
+        try {
+          const audio = new Audio(audioUrl);
+
+          // Wait for this chunk to finish before playing the next
+          await new Promise<void>((resolve, reject) => {
+            audio.onended = () => {
+              console.log(`Audio chunk ${i + 1} finished`);
+              URL.revokeObjectURL(audioUrl);
+              resolve();
+            };
+
+            audio.onerror = (e) => {
+              console.error(`Audio chunk ${i + 1} error:`, e, audio.error);
+              URL.revokeObjectURL(audioUrl);
+              reject(e);
+            };
+
+            audio.oncanplay = () => {
+              console.log(`Audio chunk ${i + 1} can play`);
+            };
+
+            audio.play().catch(reject);
+          });
+
+        } catch (chunkError) {
+          console.error(`Error playing chunk ${i + 1}:`, chunkError);
+          URL.revokeObjectURL(audioUrl);
+          // Continue with next chunk even if this one fails
+        }
+      }
+
+      console.log('All audio chunks played successfully');
     } catch (error) {
-      console.error('Error playing audio:', error);
+      console.error('Error playing audio chunks:', error);
     }
   };
 
-  useEffect(() => {
+  const downloadAudioChunks = async (chunks: Blob[], filename: string) => {
+    try {
+      // Create a combined audio file for debugging
+      const combinedBlob = new Blob(chunks, { type: 'audio/wav' });
+      const url = URL.createObjectURL(combinedBlob);
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${filename}.wav`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      console.log(`Downloaded ${chunks.length} audio chunks as ${filename}.wav`);
+    } catch (error) {
+      console.error('Error downloading audio:', error);
+    }
+  }; useEffect(() => {
     connectWebSocket();
 
     return () => {
@@ -281,14 +380,31 @@ export const ChatInterface: React.FC = () => {
                   <span className="streaming-cursor">|</span>
                 )}
               </div>
-              {message.audioChunks && message.audioChunks.length > 0 && !message.isStreaming && (
+              {/* Show audio info for all assistant messages with audio chunks */}
+              {message.role === 'assistant' && message.audioChunks && message.audioChunks.length > 0 && (
                 <div className="message-audio">
-                  <button
-                    onClick={() => playAudioChunks(message.audioChunks!)}
-                    className="play-audio-button"
-                  >
-                    🔊 Play Audio Response
-                  </button>
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.25rem' }}>
+                    <span style={{ fontSize: '0.75rem', color: '#888' }}>
+                      Audio chunks: {message.audioChunks.length}
+                      ({message.audioChunks.reduce((sum, chunk) => sum + chunk.size, 0)} bytes)
+                      {message.isStreaming && ' - [STREAMING]'}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button
+                      onClick={() => playAudioChunks(message.audioChunks!)}
+                      className="play-audio-button"
+                    >
+                      🔊 Play All Audio (Debug)
+                    </button>
+                    <button
+                      onClick={() => downloadAudioChunks(message.audioChunks!, `xarvis-audio-${message.id}`)}
+                      className="play-audio-button"
+                      style={{ background: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)' }}
+                    >
+                      📥 Download Audio
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
