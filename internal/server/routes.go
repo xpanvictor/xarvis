@@ -1,11 +1,11 @@
 package server
 
 import (
-    "context"
-    "log"
-    "net/http"
-    "net/url"
-    "time"
+	"context"
+	"log"
+	"net/http"
+	"net/url"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -89,7 +89,11 @@ func InitializeRoutes(cfg *config.Settings, r *gin.Engine, dep Dependencies) {
 			// Run demo pipeline when a msg arrives
 			in := adapters.ContractInput{
 				Msgs: []adapters.ContractMessage{
-					{Content: string(msg)},
+					{
+						Content:   string(msg),
+						Role:      adapters.USER,
+						CreatedAt: time.Now(),
+					},
 				},
 			}
 			go QuickDemo(context.Background(), rg, &llamaPv, in, uid, sid)
@@ -102,19 +106,19 @@ func QuickDemo(
 	userID uuid.UUID, sessionID uuid.UUID,
 ) {
 	// setup LLM adapter
-    // Batch LLM deltas to avoid word-by-word streaming
-    llamaAd := ollama.New(llamaPv, adapters.ContractLLMCfg{
-        DeltaTimeDuration: 200 * time.Millisecond,
-        DeltaBufferLimit:  32,
-    }, nil)
+	// Batch LLM deltas to avoid word-by-word streaming
+	llamaAd := ollama.New(llamaPv, adapters.ContractLLMCfg{
+		DeltaTimeDuration: 200 * time.Millisecond,
+		DeltaBufferLimit:  32,
+	}, nil)
 	ads := []adapters.ContractAdapter{llamaAd}
 	mux := router.New(ads)
 
 	// setup publisher and TTS
 	pub := io.New(rg)
-    // Talk directly to Piper HTTP inside the Docker network
-    // rhasspy/wyoming-piper exposes HTTP on 5000 mapped to 5003 externally
-    piperClient := piper.New("http://tts-piper:5000")
+	// Talk directly to Piper HTTP inside the Docker network
+	// rhasspy/wyoming-piper exposes HTTP on 5000 mapped to 5003 externally
+	piperClient := piper.New("http://tts-piper:5000")
 	str := stream.New(&piperClient)
 	pl := pipeline.New(&str, &pub)
 

@@ -16,10 +16,10 @@ help:
 	@echo "  make tidb        - Add local TiDB for dev (Serverless preferred in prod)"
 	@echo "  make clean       - Stop & remove all containers, networks, volumes"
 
-.PHONY: up down restart logs proxy voice ai qdrant tidb clean
+.PHONY: up down restart logs proxy voice ai qdrant tidb clean ui_prod
 
 up:
-	$(DOCKER_COMPOSE) up -d --build mosquitto xarvis-core
+	$(DOCKER_COMPOSE) --profile proxy --profile client up -d --build mosquitto xarvis-core xarvis-client
 
 down:
 	$(DOCKER_COMPOSE) down

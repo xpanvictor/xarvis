@@ -3,11 +3,12 @@ env
 .env
 venv
 .venv/
+node_modules/
 # logs
 *.log
 # resources
 generated/
-.air
+.air/
 
 # config files
 config_*.yaml

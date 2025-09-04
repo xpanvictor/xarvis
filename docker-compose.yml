@@ -6,6 +6,12 @@ x-health: &health
   retries: 12
   start_period: 20s
 
+x-health-dev: &health-dev
+  interval: 15s
+  timeout: 10s
+  retries: 3
+  start_period: 30s
+
 networks:
   edge:
     name: xarvis_edge
@@ -71,6 +77,7 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.xarvis.rule=PathPrefix(`/v1/app`)"
       - "traefik.http.routers.xarvis.entrypoints=web"
+      - "traefik.http.routers.xarvis.priority=100"
       - "traefik.http.services.xarvis.loadbalancer.server.port=8088"
       - "traefik.http.middlewares.xarvis-strip.stripprefix.prefixes=/v1/app"
       - "traefik.http.routers.xarvis.middlewares=xarvis-strip@docker"
@@ -214,6 +221,56 @@ services:
       - "traefik.http.services.qdrant.loadbalancer.server.port=6333"
       - "traefik.http.middlewares.qdrant-strip.stripprefix.prefixes=/v1/vector"
       - "traefik.http.routers.qdrant.middlewares=qdrant-strip@docker"
+
+  # ───────────────────────── Web Client (opt-in with --profile client) ─────────────────────────
+  xarvis-client:
+    profiles: [ "client" ]
+    build:
+      context: ./services/client
+      dockerfile: Dockerfile
+      target: development
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+    volumes:
+      # Live-reload: bind mount source for development
+      - ./services/client:/app
+      - /app/node_modules
+    networks: [ backend ]
+    ports: [ "5173:5173" ]
+    depends_on:
+      - xarvis-core
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:5173" ]
+      <<: *health-dev
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.client.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.client.entrypoints=web"
+      - "traefik.http.routers.client.priority=1"
+      - "traefik.http.services.client.loadbalancer.server.port=5173"
+
+  # Production client (opt-in with --profile client-prod)
+  xarvis-client-prod:
+    profiles: [ "client-prod" ]
+    build:
+      context: ./services/client
+      dockerfile: Dockerfile
+      target: production
+    restart: unless-stopped
+    networks: [ backend ]
+    ports: [ "3000:80" ]
+    depends_on:
+      - xarvis-core
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:80" ]
+      <<: *health
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.client-prod.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.client-prod.entrypoints=web"
+      - "traefik.http.routers.client-prod.priority=1"
+      - "traefik.http.services.client-prod.loadbalancer.server.port=80"
 
   # ───────────────────────── Local TiDB for dev (Serverless uses DSN; no container) ─────────────────────────
   tidb-local:

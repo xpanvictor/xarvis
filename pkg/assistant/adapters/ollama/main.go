@@ -107,19 +107,19 @@ func (o *ollamaAdapter) Process(ctx context.Context, input adapters.ContractInpu
 	} else {
 		panic("hndl error: no input channel for ollama adapter provided")
 	}
-    // per-request sequence counter for ordering
-    var seq uint
-    var handler api.ChatResponseFunc = func(cr api.ChatResponse) error {
+	// per-request sequence counter for ordering
+	var seq uint
+	var handler api.ChatResponseFunc = func(cr api.ChatResponse) error {
 
-        msg := o.ConvertMsgBackward([]api.ChatResponse{cr})[0]
-        // assign monotonically increasing index
-        seq++
-        msg.Index = seq
-        o.msgBuffer = append(o.msgBuffer, msg)
-        if msg.Done {
-            // signal end of processing
-            // no-op; completion is handled after Chat returns
-        }
+		msg := o.ConvertMsgBackward([]api.ChatResponse{cr})[0]
+		// assign monotonically increasing index
+		seq++
+		msg.Index = seq
+		o.msgBuffer = append(o.msgBuffer, msg)
+		if msg.Done {
+			// signal end of processing
+			// no-op; completion is handled after Chat returns
+		}
 		// todo: error
 		return nil
 	}
