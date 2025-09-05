@@ -56,6 +56,7 @@ func InitializeRoutes(cfg *config.Settings, r *gin.Engine, dep Dependencies) {
 			{Name: "llama3:8b", Url: *ollamaURL},
 		},
 	})
+	// also client attaches another ws connection for input streaming
 	r.GET("/ws", func(c *gin.Context) {
 		conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 		if err != nil {
