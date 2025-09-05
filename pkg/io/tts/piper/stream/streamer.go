@@ -35,11 +35,11 @@ func New(tts *piper.Piper) Streamer {
 	return Streamer{
 		TTS: tts,
 		// More aggressive defaults for better streaming
-		MaxChars:   80,                     // Reduced from 240
-		MinChars:   15,                     // Reduced from 40
-		FlushPunct: ".!?;:,",               // Added comma to punctuation
+		MaxChars:   120, // Reduced from 240
+		MinChars:   15,  // Reduced from 40
+		FlushPunct: ".!?;:",
 		CommaDelay: 300 * time.Millisecond, // Reduced from 600ms
-		IdleFlush:  400 * time.Millisecond, // Reduced from 700ms
+		IdleFlush:  1 * time.Second,
 		ForceFlush: 500 * time.Millisecond, // Reduced from 800ms
 		FadeMs:     8,
 	}
@@ -106,22 +106,48 @@ func (s *Streamer) run(ctx context.Context, deltas <-chan string, out *io.PipeWr
 		wg.Add(1)
 		go func(t string) {
 			defer wg.Done()
+			log.Printf("streamer: starting TTS for text: '%s'", t)
+
 			// call TTS
-			ctxChunk, cancel := context.WithTimeout(ctx, max(15*time.Second, s.TTS.Timeout))
-			defer cancel()
-			rc, _, err := s.TTS.DoTTS(ctxChunk, t, "")
+			ctxChunk, cancel := context.WithTimeout(ctx, max(50*time.Second, s.TTS.Timeout))
+
+			log.Printf("streamer: calling DoTTS with timeout %v on %v", max(50*time.Second, s.TTS.Timeout), t)
+			rc, ct, err := s.TTS.DoTTS(ctxChunk, t, "")
 			if err != nil {
 				log.Printf("streamer: TTS error: %v", err)
+				cancel()
 				out.CloseWithError(err)
 				return
 			}
-			defer rc.Close()
+
+			log.Printf("streamer: TTS success, content-type: %s, reading audio data...", ct)
+			// Read all audio data first while context is still valid
+			audioData, err := io.ReadAll(rc)
+			rc.Close()
+			cancel() // Cancel the timeout context since we're done with the request
+			if err != nil {
+				log.Printf("streamer: failed to read TTS audio: %v (main ctx done: %v, chunk ctx done: %v)",
+					err,
+					ctx.Err() != nil,
+					ctxChunk.Err() != nil)
+				out.CloseWithError(err)
+				return
+			}
+			log.Printf("streamer: read %d bytes from TTS", len(audioData))
+
+			// Now convert to MP3 without any context dependencies
+			mp3Audio, err := ConvertAudioToMP3(bytes.NewReader(audioData), ct)
+			if err != nil {
+				log.Printf("streamer: conversion to mp3 error: %v", err)
+				out.CloseWithError(err)
+				return
+			}
 			// If WAV, we could strip the WAV header except the first chunk, but
 			// simplest is just write chunks back-to-back; most players handle separate WAVs poorly.
 			// So we decode + re-encode or, simpler: if format is PCM use direct concat.
 			// To keep this example simple, we'll write raw bytes and accept a small boundary click.
 			// In practice, set Format:"pcm_s16le" in TTS and use addFade().
-			br := bufio.NewReader(rc)
+			br := bufio.NewReader(mp3Audio)
 			var chunk bytes.Buffer
 			n, _ := io.Copy(&chunk, br)
 			log.Printf("streamer: TTS returned %d bytes", n)
@@ -170,9 +196,10 @@ func (s *Streamer) run(ctx context.Context, deltas <-chan string, out *io.PipeWr
 			timeSinceFlush := time.Since(lastFlush)
 			log.Printf("streamer: timer check - buf_len=%d, time_since_add=%v, time_since_flush=%v", len(str), timeSinceAdd, timeSinceFlush)
 
+			// bug: since idle flush sorts of disturbs the audio quality
 			if timeSinceAdd >= s.IdleFlush {
 				log.Printf("streamer: triggering idle flush")
-				flush(true, "idle")
+				// flush(true, "idle")
 			} else if strings.HasSuffix(strings.TrimSpace(str), ",") && timeSinceAdd >= s.CommaDelay {
 				log.Printf("streamer: triggering comma flush")
 				flush(false, "comma")

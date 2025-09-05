@@ -65,7 +65,7 @@ func (m *mmrRegistry) ListUserDevices(userID uuid.UUID) []device.Device {
 func (m *mmrRegistry) ListUserEndpoints(userID uuid.UUID) []device.Endpoint {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	var endpoints []device.Endpoint
 	if userDevices, exists := m.dvMap[userID]; exists {
 		for _, d := range userDevices {

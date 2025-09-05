@@ -9,6 +9,7 @@ node_modules/
 # resources
 generated/
 .air/
+out/
 
 # config files
 config_*.yaml

@@ -223,45 +223,75 @@ export const ChatInterface: React.FC = () => {
     if (chunks.length === 0) return;
 
     try {
-      // Since each chunk is a separate WAV file from Piper TTS,
-      // we'll play them sequentially to maintain the streaming effect
+      // Play each chunk sequentially since they're individual WAV files
       for (let i = 0; i < chunks.length; i++) {
         const chunk = chunks[i];
         console.log(`Playing audio chunk ${i + 1}/${chunks.length}, size: ${chunk.size} bytes`);
 
-        // Each chunk is already a complete WAV file
-        const audioBlob = new Blob([chunk], { type: 'audio/wav' });
-        const audioUrl = URL.createObjectURL(audioBlob);
+        const audioUrl = URL.createObjectURL(chunk);
 
         try {
           const audio = new Audio(audioUrl);
 
+          // Ensure audio loads properly
+          audio.preload = 'auto';
+
           // Wait for this chunk to finish before playing the next
           await new Promise<void>((resolve, reject) => {
+            let hasResolved = false;
+
+            const cleanup = () => {
+              if (!hasResolved) {
+                hasResolved = true;
+                URL.revokeObjectURL(audioUrl);
+              }
+            };
+
             audio.onended = () => {
               console.log(`Audio chunk ${i + 1} finished`);
-              URL.revokeObjectURL(audioUrl);
+              cleanup();
               resolve();
             };
 
             audio.onerror = (e) => {
               console.error(`Audio chunk ${i + 1} error:`, e, audio.error);
-              URL.revokeObjectURL(audioUrl);
-              reject(e);
+              cleanup();
+              reject(new Error(`Audio chunk ${i + 1} failed to play`));
             };
 
-            audio.oncanplay = () => {
-              console.log(`Audio chunk ${i + 1} can play`);
+            audio.onloadstart = () => {
+              console.log(`Audio chunk ${i + 1} load started`);
             };
 
-            audio.play().catch(reject);
+            audio.oncanplaythrough = () => {
+              console.log(`Audio chunk ${i + 1} can play through`);
+            };
+
+            // Start playing
+            audio.play().catch((playError) => {
+              console.error(`Audio chunk ${i + 1} play error:`, playError);
+              cleanup();
+              reject(playError);
+            });
+
+            // Timeout fallback in case audio gets stuck
+            setTimeout(() => {
+              if (!hasResolved) {
+                console.warn(`Audio chunk ${i + 1} timed out`);
+                cleanup();
+                resolve(); // Continue to next chunk
+              }
+            }, 10000); // 10 second timeout per chunk
           });
 
         } catch (chunkError) {
-          console.error(`Error playing chunk ${i + 1}:`, chunkError);
+          console.error(`Error with chunk ${i + 1}:`, chunkError);
           URL.revokeObjectURL(audioUrl);
           // Continue with next chunk even if this one fails
         }
+
+        // Small delay between chunks to ensure clean transitions
+        await new Promise(resolve => setTimeout(resolve, 50));
       }
 
       console.log('All audio chunks played successfully');
@@ -270,10 +300,89 @@ export const ChatInterface: React.FC = () => {
     }
   };
 
+  const concatenateWavFiles = async (chunks: Blob[]): Promise<Blob> => {
+    if (chunks.length === 0) return new Blob([], { type: 'audio/wav' });
+    if (chunks.length === 1) return chunks[0];
+
+    try {
+      // Read the first chunk to get the WAV header
+      const firstChunk = await chunks[0].arrayBuffer();
+      const firstView = new DataView(firstChunk);
+
+      // Verify it's a WAV file (should start with "RIFF")
+      const riffHeader = String.fromCharCode(
+        firstView.getUint8(0),
+        firstView.getUint8(1),
+        firstView.getUint8(2),
+        firstView.getUint8(3)
+      );
+
+      if (riffHeader !== 'RIFF') {
+        console.warn('First chunk is not a valid WAV file, falling back to simple concatenation');
+        return new Blob(chunks, { type: 'audio/wav' });
+      }
+
+      // Extract header information (first 44 bytes is standard WAV header)
+      const headerSize = 44;
+      const header = new Uint8Array(firstChunk.slice(0, headerSize));
+
+      // Collect all audio data (skip headers from subsequent chunks)
+      const audioDataParts: Uint8Array[] = [];
+      let totalDataSize = 0;
+
+      for (let i = 0; i < chunks.length; i++) {
+        const chunkBuffer = await chunks[i].arrayBuffer();
+
+        if (i === 0) {
+          // First chunk: include everything after header
+          const audioData = new Uint8Array(chunkBuffer.slice(headerSize));
+          audioDataParts.push(audioData);
+          totalDataSize += audioData.length;
+        } else {
+          // Subsequent chunks: skip header (assume same 44-byte header)
+          const audioData = new Uint8Array(chunkBuffer.slice(headerSize));
+          audioDataParts.push(audioData);
+          totalDataSize += audioData.length;
+        }
+      }
+
+      // Create new WAV file with corrected size headers
+      const newHeader = new Uint8Array(header);
+      const newHeaderView = new DataView(newHeader.buffer);
+
+      // Update file size (total file size - 8 bytes for RIFF header)
+      newHeaderView.setUint32(4, totalDataSize + headerSize - 8, true);
+
+      // Update data chunk size (at offset 40 for standard WAV)
+      newHeaderView.setUint32(40, totalDataSize, true);
+
+      // Combine header with all audio data
+      const combinedSize = headerSize + totalDataSize;
+      const combined = new Uint8Array(combinedSize);
+
+      combined.set(newHeader, 0);
+      let offset = headerSize;
+
+      for (const part of audioDataParts) {
+        combined.set(part, offset);
+        offset += part.length;
+      }
+
+      return new Blob([combined], { type: 'audio/wav' });
+
+    } catch (error) {
+      console.error('Error concatenating WAV files:', error);
+      // Fallback to simple concatenation
+      return new Blob(chunks, { type: 'audio/wav' });
+    }
+  };
+
   const downloadAudioChunks = async (chunks: Blob[], filename: string) => {
     try {
-      // Create a combined audio file for debugging
-      const combinedBlob = new Blob(chunks, { type: 'audio/wav' });
+      console.log(`Downloading ${chunks.length} audio chunks as ${filename}.wav`);
+
+      // Properly concatenate WAV files
+      const combinedBlob = await concatenateWavFiles(chunks);
       const url = URL.createObjectURL(combinedBlob);
 
       const a = document.createElement('a');
@@ -284,7 +393,7 @@ export const ChatInterface: React.FC = () => {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      console.log(`Downloaded ${chunks.length} audio chunks as ${filename}.wav`);
+      console.log(`Successfully downloaded combined audio file: ${filename}.wav (${combinedBlob.size} bytes)`);
     } catch (error) {
       console.error('Error downloading audio:', error);
     }

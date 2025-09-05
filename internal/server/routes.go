@@ -78,6 +78,8 @@ func InitializeRoutes(cfg *config.Settings, r *gin.Engine, dep Dependencies) {
 
 		rg.AttachEndpoint(uid, did, websockete.New(conn, cps))
 
+		// run this in own thread
+
 		for {
 			_, msg, err := conn.ReadMessage()
 			if err != nil {

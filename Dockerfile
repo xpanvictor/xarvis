@@ -34,7 +34,7 @@ WORKDIR /app
 # - Add CA certs to avoid TLS errors when fetching modules
 # - Use Go proxy for reliable module downloads
 ENV GOPROXY=https://proxy.golang.org,direct
-RUN apk add --no-cache ca-certificates git curl && \
+RUN apk add --no-cache ca-certificates ffmpeg git curl && \
     update-ca-certificates && \
     go install github.com/air-verse/air@latest
 

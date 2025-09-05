@@ -1,12 +1,14 @@
 package piper
 
 import (
-    "context"
-    "fmt"
-    "io"
-    "net/http"
-    "net/url"
-    "time"
+	"bytes"
+	"context"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"net/url"
+	"time"
 )
 
 type Piper struct {
@@ -20,7 +22,7 @@ type Piper struct {
 }
 
 func New(bu string) Piper {
-	return Piper{BaseURL: bu}
+	return Piper{BaseURL: bu, Timeout: 40 * time.Second}
 }
 
 func (p *Piper) DoTTS(ctx context.Context, text string, optVoice string) (io.ReadCloser, string, error) {
@@ -32,24 +34,24 @@ func (p *Piper) DoTTS(ctx context.Context, text string, optVoice string) (io.Rea
 		voice = optVoice
 	}
 
-    // rhasspy/wyoming-piper HTTP: GET /api/text-to-speech?text=...&voice=...
-    // Note: This API streams a WAV body on success.
-    u, err := url.Parse(p.BaseURL + "/api/text-to-speech")
-    if err != nil {
-        return nil, "", err
-    }
-    q := u.Query()
-    q.Set("text", text)
-    if voice != "" {
-        q.Set("voice", voice)
-    }
-    u.RawQuery = q.Encode()
+	// rhasspy/wyoming-piper HTTP: GET /api/text-to-speech?text=...&voice=...
+	// Note: This API streams a WAV body on success.
+	u, err := url.Parse(p.BaseURL + "/api/text-to-speech")
+	if err != nil {
+		return nil, "", err
+	}
+	q := u.Query()
+	q.Set("text", text)
+	if voice != "" {
+		q.Set("voice", voice)
+	}
+	u.RawQuery = q.Encode()
 
-    req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
-    if err != nil {
-        return nil, "", err
-    }
-    req.Header.Set("Accept", "audio/wav")
+	req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
+	if err != nil {
+		return nil, "", err
+	}
+	req.Header.Set("Accept", "audio/mp3")
 
 	hc := p.Client
 	if hc == nil {
@@ -67,18 +69,29 @@ func (p *Piper) DoTTS(ctx context.Context, text string, optVoice string) (io.Rea
 	req = req.WithContext(ctx2)
 
 	start := time.Now()
-    resp, err := hc.Do(req)
-    if err != nil {
-        return nil, "", fmt.Errorf("tts http request failed: %w (url=%s)", err, u.String())
-    }
-    if resp.StatusCode != http.StatusOK {
-        b, _ := io.ReadAll(resp.Body)
-        resp.Body.Close()
-        return nil, "", fmt.Errorf("tts http %d: %s (url=%s, dur=%s)", resp.StatusCode, string(b), u.String(), time.Since(start))
-    }
-	// caller must Close the body
+	resp, err := hc.Do(req)
+	if err != nil {
+		return nil, "", fmt.Errorf("tts http request failed: %w (url=%s)", err, u.String())
+	}
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		return nil, "", fmt.Errorf("tts http %d: %s (url=%s, dur=%s)", resp.StatusCode, string(b), u.String(), time.Since(start))
+	}
+
+	// Read all data immediately to avoid context cancellation issues
 	ct := resp.Header.Get("Content-Type") // e.g. audio/wav
-	return resp.Body, ct, nil
+	log.Printf("Output type: %v", ct)
+
+	data, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to read TTS response body: %w", err)
+	}
+	log.Printf("DoTTS: read %d bytes of audio data", len(data))
+
+	// Return as a buffer that can be read without context dependencies
+	return io.NopCloser(bytes.NewReader(data)), ct, nil
 }
 
 func ifEmpty(s, d string) string {

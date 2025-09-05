@@ -3,7 +3,6 @@ package io
 import (
 	"context"
 	"fmt"
-	"log"
 
 	"github.com/google/uuid"
 	"github.com/xpanvictor/xarvis/pkg/io/registry"
@@ -43,7 +42,6 @@ func (p *Publisher) SendAudioFrame(
 	frame []byte,
 ) error {
 	ep, ok := p.reg.SelectEndpointWithMRU(userID)
-	log.Printf("received audio: %v : %v", frame, ep)
 	if !ok || !ep.IsAlive() || !ep.Caps().AudioSink {
 		return fmt.Errorf("couldn't send audio frame")
 	}
