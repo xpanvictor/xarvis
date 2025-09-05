@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"time"
@@ -81,14 +80,12 @@ func (p *Piper) DoTTS(ctx context.Context, text string, optVoice string) (io.Rea
 
 	// Read all data immediately to avoid context cancellation issues
 	ct := resp.Header.Get("Content-Type") // e.g. audio/wav
-	log.Printf("Output type: %v", ct)
 
 	data, err := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to read TTS response body: %w", err)
 	}
-	log.Printf("DoTTS: read %d bytes of audio data", len(data))
 
 	// Return as a buffer that can be read without context dependencies
 	return io.NopCloser(bytes.NewReader(data)), ct, nil

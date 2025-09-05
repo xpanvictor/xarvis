@@ -291,7 +291,7 @@ export const ChatInterface: React.FC = () => {
         }
 
         // Small delay between chunks to ensure clean transitions
-        await new Promise(resolve => setTimeout(resolve, 50));
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
 
       console.log('All audio chunks played successfully');

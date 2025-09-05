@@ -3,7 +3,6 @@ package ollama
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/google/uuid"
@@ -28,7 +27,6 @@ func (o *ollamaAdapter) DrainBuffer(ch adapters.ContractResponseChannel) bool {
 	// send a copy to avoid races/mutation after send
 	snapshot := make([]adapters.ContractResponseDelta, len(o.msgBuffer))
 	copy(snapshot, o.msgBuffer)
-	log.Printf("ollama adapter: draining %d deltas", len(snapshot))
 	select {
 	case ch <- snapshot:
 		// reset buffer length to zero, keep capacity
@@ -36,7 +34,6 @@ func (o *ollamaAdapter) DrainBuffer(ch adapters.ContractResponseChannel) bool {
 		return true
 	default:
 		// channel not ready; keep buffer to retry next tick
-		log.Printf("ollama adapter: response channel not ready; retaining %d deltas", len(o.msgBuffer))
 		return false
 	}
 }

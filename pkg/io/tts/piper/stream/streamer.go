@@ -39,8 +39,8 @@ func New(tts *piper.Piper) Streamer {
 		MinChars:   15,  // Reduced from 40
 		FlushPunct: ".!?;:",
 		CommaDelay: 300 * time.Millisecond, // Reduced from 600ms
-		IdleFlush:  1 * time.Second,
-		ForceFlush: 500 * time.Millisecond, // Reduced from 800ms
+		IdleFlush:  5 * time.Second,
+		ForceFlush: 8 * time.Second, // increased from 800ms
 		FadeMs:     8,
 	}
 }
@@ -64,10 +64,10 @@ func (s *Streamer) FromDeltas(ctx context.Context, deltas <-chan string) (io.Rea
 		s.CommaDelay = 300 * time.Millisecond // Reduced from 600ms
 	}
 	if s.IdleFlush == 0 {
-		s.IdleFlush = 400 * time.Millisecond // Reduced from 700ms
+		s.IdleFlush = 5 * time.Second // Reduced from 700ms
 	}
 	if s.ForceFlush == 0 {
-		s.ForceFlush = 500 * time.Millisecond // Reduced from 800ms
+		s.ForceFlush = 8 * time.Second // Reduced from 800ms
 	}
 	if s.FadeMs == 0 {
 		s.FadeMs = 8
@@ -97,21 +97,21 @@ func (s *Streamer) run(ctx context.Context, deltas <-chan string, out *io.PipeWr
 		if text == "" {
 			return
 		}
-		if !force && len(text) < s.MinChars {
+		// force should require proper handling
+		if force && len(text) < s.MinChars {
 			return
 		}
 		// reset buffer
 		buf.Reset()
-		log.Printf("streamer: flush len=%d force=%v reason=%s", len(text), force, reason)
+		// log.Printf("streamer: flush len=%d force=%v reason=%s", len(text), force, reason)
 		wg.Add(1)
 		go func(t string) {
 			defer wg.Done()
-			log.Printf("streamer: starting TTS for text: '%s'", t)
 
 			// call TTS
 			ctxChunk, cancel := context.WithTimeout(ctx, max(50*time.Second, s.TTS.Timeout))
 
-			log.Printf("streamer: calling DoTTS with timeout %v on %v", max(50*time.Second, s.TTS.Timeout), t)
+			log.Printf("streamer: calling DoTTS on `%v` due to [%v]:[%t]", t, reason, force)
 			rc, ct, err := s.TTS.DoTTS(ctxChunk, t, "")
 			if err != nil {
 				log.Printf("streamer: TTS error: %v", err)
@@ -120,7 +120,6 @@ func (s *Streamer) run(ctx context.Context, deltas <-chan string, out *io.PipeWr
 				return
 			}
 
-			log.Printf("streamer: TTS success, content-type: %s, reading audio data...", ct)
 			// Read all audio data first while context is still valid
 			audioData, err := io.ReadAll(rc)
 			rc.Close()
@@ -133,7 +132,6 @@ func (s *Streamer) run(ctx context.Context, deltas <-chan string, out *io.PipeWr
 				out.CloseWithError(err)
 				return
 			}
-			log.Printf("streamer: read %d bytes from TTS", len(audioData))
 
 			// Now convert to MP3 without any context dependencies
 			mp3Audio, err := ConvertAudioToMP3(bytes.NewReader(audioData), ct)
@@ -149,8 +147,7 @@ func (s *Streamer) run(ctx context.Context, deltas <-chan string, out *io.PipeWr
 			// In practice, set Format:"pcm_s16le" in TTS and use addFade().
 			br := bufio.NewReader(mp3Audio)
 			var chunk bytes.Buffer
-			n, _ := io.Copy(&chunk, br)
-			log.Printf("streamer: TTS returned %d bytes", n)
+			io.Copy(&chunk, br)
 			data := chunk.Bytes()
 			// Optional: add small fade at boundaries if PCM
 			_, _ = out.Write(data)
@@ -177,13 +174,11 @@ func (s *Streamer) run(ctx context.Context, deltas <-chan string, out *io.PipeWr
 			if d == "" {
 				continue
 			}
-			log.Printf("streamer: got delta len=%d text='%s' buf_len=%d", len(d), d, buf.Len())
 			buf.WriteString(d)
 			lastAdd = time.Now()
 			// punctuation-driven flush
 			currentText := buf.String()
 			if endsWithAny(currentText, s.FlushPunct) || len(currentText) >= s.MaxChars {
-				log.Printf("streamer: triggering punct-or-max flush, text ends with punct: %v, len: %d", endsWithAny(currentText, s.FlushPunct), len(currentText))
 				flush(false, "punct-or-max")
 			}
 		case <-ticker.C:
@@ -194,19 +189,15 @@ func (s *Streamer) run(ctx context.Context, deltas <-chan string, out *io.PipeWr
 			}
 			timeSinceAdd := time.Since(lastAdd)
 			timeSinceFlush := time.Since(lastFlush)
-			log.Printf("streamer: timer check - buf_len=%d, time_since_add=%v, time_since_flush=%v", len(str), timeSinceAdd, timeSinceFlush)
 
 			// bug: since idle flush sorts of disturbs the audio quality
 			if timeSinceAdd >= s.IdleFlush {
-				log.Printf("streamer: triggering idle flush")
-				// flush(true, "idle")
+				flush(true, "idle")
 			} else if strings.HasSuffix(strings.TrimSpace(str), ",") && timeSinceAdd >= s.CommaDelay {
-				log.Printf("streamer: triggering comma flush")
 				flush(false, "comma")
 			} else if timeSinceFlush >= s.ForceFlush {
-				log.Printf("streamer: triggering force flush")
 				// Force periodic flush to avoid starvation when tokens flow continuously
-				flush(false, "force")
+				flush(true, "force")
 			}
 		}
 	}
