@@ -62,7 +62,7 @@ func (p *Pipeline) Broadcast(
 		if err != nil {
 			fmt.Printf("Warning: could not create debug audio file %s: %v\n", debugPath, err)
 		} else {
-			fmt.Printf("Debug: saving complete audio to %s\n", debugPath)
+			// fmt.Printf("Debug: saving complete audio to %s\n", debugPath)
 		}
 	}
 
@@ -148,7 +148,7 @@ pumpLoop:
 			"timestamp": time.Now().Unix(),
 		})
 		if debugFile != nil {
-			fmt.Printf("Debug: audio saved to %s\n", debugPath)
+			// fmt.Printf("Debug: audio saved to %s\n", debugPath)
 		}
 	case <-time.After(10 * time.Second):
 		// optional timeout to avoid hanging forever
@@ -157,7 +157,7 @@ pumpLoop:
 			"timeout":   true,
 		})
 		if debugFile != nil {
-			fmt.Printf("Debug: audio saved to %s (timeout)\n", debugPath)
+			// fmt.Printf("Debug: audio saved to %s (timeout)\n", debugPath)
 		}
 	}
 

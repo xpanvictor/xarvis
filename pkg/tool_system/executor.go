@@ -5,53 +5,61 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/xpanvictor/xarvis/pkg/assistant"
+	"github.com/xpanvictor/xarvis/pkg/assistant/adapters"
 )
 
+type ToolExecutionResult struct {
+	ToolCall *adapters.ContractToolCall
+	Result   map[string]any
+	Error    error
+	Duration time.Duration
+}
+
 type Executor interface {
-	Execute(ctx context.Context, reg Registry, call assistant.ToolCall) (*assistant.ToolCall, *assistant.ToolResult, error)
+	Execute(ctx context.Context, reg Registry, call adapters.ContractToolCall) (*ToolExecutionResult, error)
 }
 
 type executor struct{}
 
 // Execute implements Executor.
-func (e *executor) Execute(ctx context.Context, reg Registry, call assistant.ToolCall) (*assistant.ToolCall, *assistant.ToolResult, error) {
-	// retrieve tool from registry
-	tool, ok := reg.Get(call.Name)
-	if !ok {
-		return nil, nil, fmt.Errorf("tool not found")
-	}
-	// todo: validate input
-	// metric
-	startTime := time.Now()
-	// todo: check if async action
+func (e *executor) Execute(ctx context.Context, reg Registry, call adapters.ContractToolCall) (*ToolExecutionResult, error) {
+	// retrieve tool from registry by name
+	var selectedTool Tool
+	var found bool
 
-	// handle fn
-	res, toolErr := tool.Handler(ctx, call.Arguments)
+	// Search through all tools to find one with matching name
+	tools := reg.List()
+	for _, tool := range tools {
+		if tool.Spec.Name == call.ToolName {
+			selectedTool = tool
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return &ToolExecutionResult{
+			ToolCall: &call,
+			Error:    fmt.Errorf("tool not found: %s", call.ToolName),
+		}, fmt.Errorf("tool not found: %s", call.ToolName)
+	}
+
+	// Metric tracking
+	startTime := time.Now()
+
+	// Execute the tool handler
+	result, toolErr := selectedTool.Handler(ctx, call.Arguments)
 	runningDuration := time.Since(startTime)
 
-	if toolErr != nil {
-		call.Status = assistant.FAILED
-		call.Result = &assistant.ToolResult{
-			Response: map[string]any{
-				"error": toolErr.Error(),
-			},
-		}
-		call.RunningDuration = runningDuration
-
-		return &call, call.Result, toolErr
+	// Create the execution result
+	executionResult := &ToolExecutionResult{
+		ToolCall: &call,
+		Result:   result,
+		Error:    toolErr,
+		Duration: runningDuration,
 	}
 
-	toolResult := assistant.ToolResult{
-		Response: res,
-	}
-
-	// Update the call with success status and result
-	call.Status = assistant.SUCCESS
-	call.Result = &toolResult
-	call.RunningDuration = runningDuration
-
-	return &call, &toolResult, nil
+	return executionResult, toolErr
 }
 
 func (e *executor) AsyncExecute() {}

@@ -21,4 +21,11 @@ while
 	but controlled (little 100ms rebounce)
 - Model should be time conscious.
 
+Adapter handles tool structure
+- Start streaming.
+- Detect tool_call:
+- Buffer tool_call:
+- Send as single stream to writer directly
+- See you next time protocol
+
 

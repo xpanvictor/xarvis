@@ -1,37 +1,31 @@
 package toolsystem
 
-import "context"
+import (
+	"context"
 
-type JSONType string
-
-const (
-	JSONString JSONType = "string"
-	JSONNumber JSONType = "number"
-	JSONObject JSONType = "object"
-	JSONArray  JSONType = "array"
-	JSONBool   JSONType = "boolean"
+	"github.com/xpanvictor/xarvis/pkg/assistant/adapters"
 )
 
-type ArgSpec struct {
-	Name        string
-	Type        JSONType
-	Description string
-	Required    bool
-}
-
-type ResultSpec struct {
-	Name        string
-	Type        JSONType
-	Description string
-}
-
-type ToolSpec struct {
-	Name        string
-	Version     string
-	Description string
-	Args        []ArgSpec
-	Result      []ResultSpec
-	Tags        []string
-}
-
+// ToolHandler function signature for tool execution
 type ToolHandler func(ctx context.Context, args map[string]any) (map[string]any, error)
+
+// ConvertToolSpecToContract converts a tool spec to contract format
+func ConvertToolSpecToContract(name, version, description string, properties map[string]adapters.ContractToolProperty, required []string) adapters.ContractTool {
+	return adapters.ContractTool{
+		Name:        name,
+		Type:        "function", // default type
+		Description: description,
+		ToolFunction: adapters.ContractToolFn{
+			Parameters: adapters.ContractToolIOType{
+				Type:       "object",
+				Properties: properties,
+			},
+			RequiredProps: required,
+			// OutputStructure can be defined later if needed
+			OutputStructure: adapters.ContractToolIOType{
+				Type:       "object",
+				Properties: make(map[string]adapters.ContractToolProperty),
+			},
+		},
+	}
+}

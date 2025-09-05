@@ -21,14 +21,21 @@ type ContractMessage struct {
 	CreatedAt time.Time
 }
 
-type ContractToolIOType struct {
-	Type  string // obj default
-	KVMap map[string]any
+type ContractToolProperty struct {
+	Type        string   `json:"type"`
+	Description string   `json:"description"`
+	Enum        []string `json:"enum,omitempty"`
 }
+
+type ContractToolIOType struct {
+	Type       string                          `json:"type"` // "object" default
+	Properties map[string]ContractToolProperty `json:"properties"`
+}
+
 type ContractToolFn struct {
-	Props           ContractToolIOType
-	RequiredProps   []string
-	OutputStructure ContractToolIOType
+	Parameters      ContractToolIOType `json:"parameters"`
+	RequiredProps   []string           `json:"required"`
+	OutputStructure ContractToolIOType `json:"output_structure"`
 }
 type ContractTool struct {
 	Name         string
@@ -54,7 +61,7 @@ type ContractToolCall struct {
 	ID        uuid.UUID
 	CreatedAt time.Time
 	ToolName  string
-	Arguments ContractToolIOType // so value will be actual value not type
+	Arguments map[string]any // actual values, not type definitions
 }
 
 // response is by default a stream

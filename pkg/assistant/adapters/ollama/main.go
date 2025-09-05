@@ -61,8 +61,18 @@ func (o ollamaAdapter) ConvertMsgBackward(msgs []api.ChatResponse) []adapters.Co
 		role := adapters.MsgRole(msg.Message.Role)
 		rawToolCalls := msg.Message.ToolCalls
 		toolCalls := make([]adapters.ContractToolCall, 0)
-		// todo: map toolcall
-		fmt.Printf("%v", rawToolCalls)
+
+		// Convert Ollama tool calls to contract tool calls
+		for _, rawToolCall := range rawToolCalls {
+			contractToolCall := adapters.ContractToolCall{
+				ID:        uuid.New(), // Generate new ID for tracking
+				CreatedAt: msg.CreatedAt,
+				ToolName:  rawToolCall.Function.Name,
+				Arguments: map[string]any(rawToolCall.Function.Arguments),
+			}
+			toolCalls = append(toolCalls, contractToolCall)
+		}
+
 		done := msg.Done
 		createdAt := msg.CreatedAt
 		// extract tools
@@ -79,6 +89,52 @@ func (o ollamaAdapter) ConvertMsgBackward(msgs []api.ChatResponse) []adapters.Co
 	return cm
 }
 
+func (o *ollamaAdapter) ConvertTools(tools []adapters.ContractTool) []api.Tool {
+	cts := make([]api.Tool, 0)
+	for _, rt := range tools {
+		// Convert contract properties to ollama properties
+		ollamaProperties := make(map[string]struct {
+			Type        string   `json:"type"`
+			Description string   `json:"description"`
+			Enum        []string `json:"enum,omitempty"`
+		})
+
+		for propName, propDef := range rt.ToolFunction.Parameters.Properties {
+			ollamaProperties[propName] = struct {
+				Type        string   `json:"type"`
+				Description string   `json:"description"`
+				Enum        []string `json:"enum,omitempty"`
+			}{
+				Type:        propDef.Type,
+				Description: propDef.Description,
+				Enum:        propDef.Enum,
+			}
+		}
+
+		cts = append(cts, api.Tool{
+			Type: rt.Type,
+			Function: api.ToolFunction{
+				Name:        rt.Name,
+				Description: rt.Description,
+				Parameters: struct {
+					Type       string   `json:"type"`
+					Required   []string `json:"required"`
+					Properties map[string]struct {
+						Type        string   `json:"type"`
+						Description string   `json:"description"`
+						Enum        []string `json:"enum,omitempty"`
+					} `json:"properties"`
+				}{
+					Type:       rt.ToolFunction.Parameters.Type,
+					Required:   rt.ToolFunction.RequiredProps,
+					Properties: ollamaProperties,
+				},
+			},
+		})
+	}
+	return cts
+}
+
 // Process implements adapters.ContractAdapter.
 func (o *ollamaAdapter) Process(ctx context.Context, input adapters.ContractInput, rc *adapters.ContractResponseChannel) adapters.ContractResponse {
 	genID, err := uuid.NewUUID()
@@ -93,6 +149,7 @@ func (o *ollamaAdapter) Process(ctx context.Context, input adapters.ContractInpu
 		Model:    router.GenerateModelName(model),
 		Messages: o.ConvertMsgs(input.Msgs),
 		Stream:   &stream,
+		Tools:    o.ConvertTools(input.ToolList),
 	}
 
 	// construct handler

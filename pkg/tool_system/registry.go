@@ -3,11 +3,15 @@ package toolsystem
 import (
 	"fmt"
 	"sync"
+
+	"github.com/xpanvictor/xarvis/pkg/assistant/adapters"
 )
 
 type Tool struct {
-	Spec    ToolSpec
+	Spec    adapters.ContractTool
 	Handler ToolHandler
+	Version string   // for registry management
+	Tags    []string // for categorization
 }
 
 type Registry interface {
@@ -15,6 +19,8 @@ type Registry interface {
 	Unregister(toolId string) error
 	Get(toolId string) (Tool, bool)
 	List() []Tool
+	// New method to get tools in contract format for assistant
+	GetContractTools() []adapters.ContractTool
 }
 
 type memoryRegistry struct {
@@ -28,6 +34,17 @@ func (m *memoryRegistry) Get(toolId string) (Tool, bool) {
 	defer m.mu.RUnlock()
 	tool, exist := m.tools[toolId]
 	return tool, exist
+}
+
+// GetContractTools implements Registry.
+func (m *memoryRegistry) GetContractTools() []adapters.ContractTool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := make([]adapters.ContractTool, 0, len(m.tools))
+	for _, tool := range m.tools {
+		out = append(out, tool.Spec)
+	}
+	return out
 }
 
 // List implements Registry.
@@ -70,5 +87,5 @@ func NewMemoryRegistry() Registry {
 
 func GetToolId(t Tool) string {
 	internal_mask := "xp_t"
-	return fmt.Sprintf("%s:%s:%s", internal_mask, t.Spec.Name, t.Spec.Version)
+	return fmt.Sprintf("%s:%s:%s", internal_mask, t.Spec.Name, t.Version)
 }

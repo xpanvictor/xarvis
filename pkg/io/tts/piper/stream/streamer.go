@@ -111,7 +111,7 @@ func (s *Streamer) run(ctx context.Context, deltas <-chan string, out *io.PipeWr
 			// call TTS
 			ctxChunk, cancel := context.WithTimeout(ctx, max(50*time.Second, s.TTS.Timeout))
 
-			log.Printf("streamer: calling DoTTS on `%v` due to [%v]:[%t]", t, reason, force)
+			// log.Printf("streamer: calling DoTTS on `%v` due to [%v]:[%t]", t, reason, force)
 			rc, ct, err := s.TTS.DoTTS(ctxChunk, t, "")
 			if err != nil {
 				log.Printf("streamer: TTS error: %v", err)
