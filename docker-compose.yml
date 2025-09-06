@@ -103,24 +103,24 @@ services:
   # ───────────────────────── Voice (opt-in with --profile voice) ─────────────────────────
   stt-whisper:
     profiles: [ "voice" ]
-    image: ghcr.io/ggerganov/whisper.cpp:main
+    image: onerahmet/openai-whisper-asr-webservice:latest
     # If running on Apple Silicon and the image lacks arm64,
     # uncomment the next line to use x86 emulation.
     platform: linux/amd64
-    command: [ "./server", "-m", "/models/ggml-base.en.bin", "-l", "auto", "-t", "4" ]
+    environment:
+      ASR_MODEL: base.en
+      ASR_ENGINE: openai_whisper
     networks: [ backend ]
-    ports: [ "8080:8080" ]
-    volumes:
-      - ./models/whisper:/models:ro
+    ports: [ "8080:9000" ]
     healthcheck:
-      # Try wget, then curl (some minimal images lack one or the other)
-      test: [ "CMD-SHELL", "wget -qO- http://localhost:8080/health || curl -fsS http://localhost:8080/health || exit 1" ]
+      # Check if the whisper service is responding
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:9000/health || curl -fsS http://localhost:9000/health || exit 1" ]
       <<: *health
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.stt.rule=PathPrefix(`/v1/stt`)"
       - "traefik.http.routers.stt.entrypoints=web"
-      - "traefik.http.services.stt.loadbalancer.server.port=8080"
+      - "traefik.http.services.stt.loadbalancer.server.port=9000"
       - "traefik.http.middlewares.stt-strip.stripprefix.prefixes=/v1/stt"
       - "traefik.http.routers.stt.middlewares=stt-strip@docker"
 

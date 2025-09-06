@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/xpanvictor/xarvis/internal/config"
@@ -12,8 +11,6 @@ import (
 	"github.com/xpanvictor/xarvis/internal/domains/sys_manager/pipeline"
 	"github.com/xpanvictor/xarvis/pkg/Logger"
 	"github.com/xpanvictor/xarvis/pkg/assistant/adapters"
-	"github.com/xpanvictor/xarvis/pkg/assistant/adapters/ollama"
-	olp "github.com/xpanvictor/xarvis/pkg/assistant/providers/ollama"
 	"github.com/xpanvictor/xarvis/pkg/assistant/router"
 	"github.com/xpanvictor/xarvis/pkg/io"
 	"github.com/xpanvictor/xarvis/pkg/io/registry"
@@ -35,7 +32,7 @@ type BrainSystem struct {
 // NewBrainSystem creates a BrainSystem with the provided dependencies
 func NewBrainSystem(
 	cfg config.BrainConfig,
-	globalMux *router.Mux, // Keep for compatibility but create per-user
+	globalMux *router.Mux, // Use the shared global router
 	deviceReg registry.DeviceRegistry,
 	piperURL *url.URL,
 	logger Logger.Logger,
@@ -49,22 +46,15 @@ func NewBrainSystem(
 		logger.Error("Failed to register example tools: %v", err)
 	}
 
-	// Create a dedicated LLM router for this brain system to avoid shared state
-	perUserMux, err := createPerUserLLMRouter(logger)
-	if err != nil {
-		logger.Errorf("Failed to create per-user LLM router, falling back to shared: %v", err)
-		perUserMux = globalMux
-	}
-
 	// Create TTS and streaming pipeline
 	piperClient := piper.New(piperURL.String())
 	streamer := stream.New(&piperClient)
 	publisher := io.New(deviceReg)
 	pipeline := pipeline.New(&streamer, &publisher)
 
-	// Create brain with dedicated dependencies
+	// Create brain with shared global router (no longer per-user)
 	defaultModel := "llama3.1:8b-instruct" // Use tool-compatible model
-	brain := NewBrain(cfg, toolRegistry, executor, perUserMux, logger, defaultModel)
+	brain := NewBrain(cfg, toolRegistry, executor, *globalMux, logger, defaultModel)
 
 	return &BrainSystem{
 		Brain:    brain,
@@ -179,40 +169,4 @@ func (bs *BrainSystem) handleResponseWithPipeline(
 	}()
 
 	return nil // Return immediately, streaming happens in background
-}
-
-// createPerUserLLMRouter creates a dedicated LLM router for each brain system
-// This ensures that each user has their own adapter instances with isolated state
-func createPerUserLLMRouter(logger Logger.Logger) (*router.Mux, error) {
-	// Parse Ollama URL - use the same configuration as the global router
-	ollamaURL, err := url.Parse("http://ollama:11434")
-	if err != nil {
-		return nil, fmt.Errorf("invalid Ollama URL: %w", err)
-	}
-
-	// Create model configuration
-	models := []config.LLMModelConfig{
-		{
-			Name: "llama3.1:8b-instruct",
-			Url:  *ollamaURL,
-		},
-	}
-
-	// Create fresh Ollama provider instance
-	provider := olp.New(config.OllamaConfig{
-		LLamaModels: models,
-	})
-
-	// Create fresh adapter instance with isolated state
-	adapter := ollama.New(&provider, adapters.ContractLLMCfg{
-		DeltaTimeDuration: 200 * time.Millisecond,
-		DeltaBufferLimit:  32,
-	}, nil)
-
-	// Create router with the fresh adapter
-	adapters := []adapters.ContractAdapter{adapter}
-	mux := router.New(adapters)
-
-	logger.Infof("Created dedicated LLM router for brain system with fresh adapter instances")
-	return &mux, nil
 }

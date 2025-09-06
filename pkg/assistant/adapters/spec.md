@@ -13,13 +13,15 @@ Adapter layer wraps around providing n-1 for contract types.
 - Response json. (To be supported later)
 
 ## Breakdown
-Takes in `AssistantInput` and returns `AssistantOutputStream`.
+Takes `ContractInput` and returns or streams through a channel. 
 Stream can be actual stream or all response at once. 
 while
 	ctx not done & buffer not full & !bufferTimeout
 	buffer stream else insert into stream
 	but controlled (little 100ms rebounce)
 - Model should be time conscious.
+
+If real stream, bunch of tokens should be buffered at once not just individual characters sent from the model, also, tool calls should be sent together.
 
 Adapter handles tool structure
 - Start streaming.

@@ -2,112 +2,97 @@ package app
 
 import (
 	"fmt"
-	"net/url"
 	"time"
 
 	"github.com/xpanvictor/xarvis/internal/config"
 	"github.com/xpanvictor/xarvis/pkg/Logger"
 	"github.com/xpanvictor/xarvis/pkg/assistant/adapters"
+	geminiadapter "github.com/xpanvictor/xarvis/pkg/assistant/adapters/gemini"
 	"github.com/xpanvictor/xarvis/pkg/assistant/adapters/ollama"
-	olp "github.com/xpanvictor/xarvis/pkg/assistant/providers/ollama"
+	geminiprovider "github.com/xpanvictor/xarvis/pkg/assistant/providers/gemini"
+	olpprovider "github.com/xpanvictor/xarvis/pkg/assistant/providers/ollama"
 	"github.com/xpanvictor/xarvis/pkg/assistant/router"
 )
 
-// LLMConfig represents LLM configuration options
-type LLMConfig struct {
-	DefaultDeltaTime time.Duration
-	DefaultBuffer    int
-	OllamaURL        string
-	Models           []string
-}
+const (
+	defaultDeltaTime = 200 * time.Millisecond
+	defaultBuffer    = 32
+)
 
-// DefaultLLMConfig returns sensible defaults for LLM configuration,
-// with overrides from application config if available
-func DefaultLLMConfig() LLMConfig {
-	return LLMConfig{
-		DefaultDeltaTime: 200 * time.Millisecond,
-		DefaultBuffer:    32,
-		OllamaURL:        "http://ollama:11434", // Use config from yaml
-		Models:           []string{"llama3.1:8b-instruct"},
-	}
-}
-
-// LLMConfigFromSettings creates LLM configuration from application settings
-func LLMConfigFromSettings(cfg *config.Settings) LLMConfig {
-	// Start with defaults
-	llmConfig := DefaultLLMConfig()
-
-	// TODO: Override with values from cfg.ModelRouter when the struct is available
-	// For now, we use the defaults which match the config file values
-
-	return llmConfig
-}
-
-// LLMRouterFactory creates LLM routers with different provider configurations
+// LLMRouterFactory creates LLM routers with different provider configurations.
 type LLMRouterFactory struct {
-	config LLMConfig
+	config *config.Settings
 	logger *Logger.Logger
 }
 
-// NewLLMRouterFactory creates a new LLM router factory
-func NewLLMRouterFactory(config LLMConfig, logger *Logger.Logger) *LLMRouterFactory {
+// NewLLMRouterFactory creates a new LLM router factory.
+func NewLLMRouterFactory(config *config.Settings, logger *Logger.Logger) *LLMRouterFactory {
 	return &LLMRouterFactory{
 		config: config,
 		logger: logger,
 	}
 }
 
-// CreateRouter creates an LLM router with configured providers
+// CreateRouter creates an LLM router with configured providers.
 func (f *LLMRouterFactory) CreateRouter() (*router.Mux, error) {
-	var adapters []adapters.ContractAdapter
+	var createdAdapters []adapters.ContractAdapter
 
-	// Create Ollama provider if configured
-	if f.config.OllamaURL != "" {
+	// Prioritize Gemini as the default if configured.
+	if f.config.AssistantKeys.Gemini.APIKey != "" {
+		geminiAdapter, err := f.createGeminiAdapter()
+		if err != nil {
+			f.logger.Warnf("failed to create Gemini adapter, skipping: %v", err)
+		} else {
+			createdAdapters = append(createdAdapters, geminiAdapter)
+			f.logger.Info("Gemini adapter created and set as default.")
+		}
+	}
+
+	// Add Ollama provider if configured.
+	if len(f.config.AssistantKeys.OllamaCredentials.LLamaModels) > 0 {
 		ollamaAdapter, err := f.createOllamaAdapter()
 		if err != nil {
-			return nil, fmt.Errorf("failed to create Ollama adapter: %w", err)
+			f.logger.Warnf("failed to create Ollama adapter, skipping: %v", err)
+		} else {
+			createdAdapters = append(createdAdapters, ollamaAdapter)
 		}
-		adapters = append(adapters, ollamaAdapter)
 	}
 
-	if len(adapters) == 0 {
-		return nil, fmt.Errorf("no LLM adapters configured")
+	if len(createdAdapters) == 0 {
+		return nil, fmt.Errorf("no LLM adapters could be configured, please check API keys and settings")
 	}
 
-	mux := router.New(adapters)
-	f.logger.Infof("LLM router created with %d adapter(s)", len(adapters))
+	mux := router.New(createdAdapters)
+	f.logger.Infof("LLM router created with %d adapter(s)", len(createdAdapters))
 
 	return &mux, nil
 }
 
-// createOllamaAdapter creates an Ollama adapter with the configured settings
-func (f *LLMRouterFactory) createOllamaAdapter() (adapters.ContractAdapter, error) {
-	// Parse Ollama URL
-	ollamaURL, err := url.Parse(f.config.OllamaURL)
+// createGeminiAdapter creates a Gemini adapter.
+func (f *LLMRouterFactory) createGeminiAdapter() (adapters.ContractAdapter, error) {
+	provider, err := geminiprovider.New(f.config.AssistantKeys.Gemini)
 	if err != nil {
-		return nil, fmt.Errorf("invalid Ollama URL: %w", err)
+		return nil, fmt.Errorf("failed to create gemini provider: %w", err)
 	}
 
-	// Create model configurations
-	var models []config.LLMModelConfig
-	for _, modelName := range f.config.Models {
-		models = append(models, config.LLMModelConfig{
-			Name: modelName,
-			Url:  *ollamaURL,
-		})
-	}
-
-	// Create Ollama provider
-	provider := olp.New(config.OllamaConfig{
-		LLamaModels: models,
-	})
-
-	// Create adapter with configured batching
-	adapter := ollama.New(&provider, adapters.ContractLLMCfg{
-		DeltaTimeDuration: f.config.DefaultDeltaTime,
-		DeltaBufferLimit:  uint(f.config.DefaultBuffer),
+	adapter := geminiadapter.New(provider, adapters.ContractLLMCfg{
+		DeltaTimeDuration: defaultDeltaTime,
+		DeltaBufferLimit:  uint(defaultBuffer),
 	}, nil)
 
-	f.logger.Infof("Ollama adapter created for URL: %s, Models: %v", f.config.OllamaURL, f.config.Models)
+	f.logger.Info("Gemini adapter created successfully.")
+	return adapter, nil
+}
+
+// createOllamaAdapter creates an Ollama adapter.
+func (f *LLMRouterFactory) createOllamaAdapter() (adapters.ContractAdapter, error) {
+	provider := olpprovider.New(f.config.AssistantKeys.OllamaCredentials)
+
+	adapter := ollama.New(&provider, adapters.ContractLLMCfg{
+		DeltaTimeDuration: defaultDeltaTime,
+		DeltaBufferLimit:  uint(defaultBuffer),
+	}, nil)
+
+	f.logger.Infof("Ollama adapter created for %d models.", len(f.config.AssistantKeys.OllamaCredentials.LLamaModels))
 	return adapter, nil
 }

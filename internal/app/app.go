@@ -66,8 +66,7 @@ func (a *App) setupDependencies() error {
 // setupLLMRouter configures the LLM providers and creates the router
 func (a *App) setupLLMRouter() error {
 	// Create LLM router factory with configuration from settings
-	llmConfig := LLMConfigFromSettings(a.Config)
-	factory := NewLLMRouterFactory(llmConfig, a.Logger)
+	factory := NewLLMRouterFactory(a.Config, a.Logger)
 
 	// Create the router
 	mux, err := factory.CreateRouter()

@@ -23,8 +23,8 @@ type Brain struct {
 	registry     toolsystem.Registry
 	executor     toolsystem.Executor
 	logger       Logger.Logger
-	mux          *router.Mux // LLM router/multiplexer
-	defaultModel string      // Default model name to use for requests
+	mux          router.Mux // LLM router/multiplexer
+	defaultModel string     // Default model name to use for requests
 	// memory
 	// msg history
 }
@@ -39,27 +39,37 @@ type BrainSession struct {
 // ProcessMessage handles incoming messages and returns response channel for streaming
 // The caller (BrainSystem) handles the pipeline broadcasting
 func (b *Brain) ProcessMessage(ctx context.Context, session BrainSession, msg conversation.Message) (<-chan []adapters.ContractResponseDelta, error) {
+
+	// generate sys message
+
+	ct := time.Now()
+	systemMessage := adapters.ContractMessage{
+		Role:      adapters.SYSTEM,
+		Content:   fmt.Sprintf("You are an AI agent called Xarvis and you're sort of my second brain. The current time is %v", ct),
+		CreatedAt: ct,
+	}
+
 	// Debug logging for message content
-	b.logger.Infof("Brain processing for UserID %s, SessionID %s: Message = '%s'", 
+	b.logger.Infof("Brain processing for UserID %s, SessionID %s: Message = '%s'",
 		session.UserID.String(), session.SessionID.String(), msg.Text)
-	
+
 	// Convert conversation message to contract format
-	contractMsgs := []adapters.ContractMessage{msg.ToContractMessage()}
+	contractMsgs := []adapters.ContractMessage{systemMessage, msg.ToContractMessage()}
 
 	// Add conversation history
 	for i, histMsg := range session.Messages {
-		b.logger.Infof("Brain adding history message %d for UserID %s: '%s'", 
+		b.logger.Infof("Brain adding history message %d for UserID %s: '%s'",
 			i, session.UserID.String(), histMsg.Text)
 		contractMsgs = append(contractMsgs, histMsg.ToContractMessage())
 	}
 
 	// Get available tools from registry
-	// availableTools := b.registry.GetContractTools()
+	availableTools := b.registry.GetContractTools()
 
 	// Create contract input
 	contractInput := adapters.ContractInput{
 		ID:       uuid.New(),
-		ToolList: []adapters.ContractTool{},
+		ToolList: availableTools,
 		Meta:     map[string]interface{}{"user_id": session.UserID.String()},
 		Msgs:     contractMsgs,
 		HandlerModel: adapters.ContractSelectedModel{
@@ -396,7 +406,7 @@ func NewBrain(
 	cfg config.BrainConfig,
 	registry toolsystem.Registry,
 	executor toolsystem.Executor,
-	mux *router.Mux,
+	mux router.Mux,
 	logger Logger.Logger,
 	defaultModel string,
 ) *Brain {

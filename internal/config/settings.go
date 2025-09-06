@@ -43,9 +43,15 @@ type LLMModelConfig struct {
 type OllamaConfig struct {
 	LLamaModels []LLMModelConfig
 }
+
+type GeminiConfig struct {
+	APIKey string `mapstructure:"gemini_api_key"`
+}
+
 type AssistantKeysObj struct {
 	OpenAiApiKey      string `mapstructure:"open_ai_api_key"`
 	OllamaCredentials OllamaConfig
+	Gemini            GeminiConfig `mapstructure:"gemini"`
 }
 
 type BrainConfig struct {

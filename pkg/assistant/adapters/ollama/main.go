@@ -13,29 +13,14 @@ import (
 )
 
 type ollamaAdapter struct {
-	op        *ollama.OllamaProvider
-	msgBuffer []adapters.ContractResponseDelta
-	cfg       adapters.ContractLLMCfg
-	drc       *adapters.ContractResponseChannel
+	op  *ollama.OllamaProvider
+	cfg adapters.ContractLLMCfg
 }
 
 // DrainBuffer implements adapters.ContractAdapter.
+// This is a no-op since we don't use shared buffers anymore
 func (o *ollamaAdapter) DrainBuffer(ch adapters.ContractResponseChannel) bool {
-	if len(o.msgBuffer) == 0 {
-		return false
-	}
-	// send a copy to avoid races/mutation after send
-	snapshot := make([]adapters.ContractResponseDelta, len(o.msgBuffer))
-	copy(snapshot, o.msgBuffer)
-	select {
-	case ch <- snapshot:
-		// reset buffer length to zero, keep capacity
-		o.msgBuffer = o.msgBuffer[:0]
-		return true
-	default:
-		// channel not ready; keep buffer to retry next tick
-		return false
-	}
+	return false // No shared buffer to drain
 }
 
 // available roles for ollama: system, role, assistant
@@ -152,19 +137,19 @@ func (o *ollamaAdapter) Process(ctx context.Context, input adapters.ContractInpu
 		Tools:    o.ConvertTools(input.ToolList),
 	}
 
-	// construct handler
-	var handlerChannel *adapters.ContractResponseChannel
-	if rc != nil {
-		handlerChannel = rc
-	} else if o.drc != nil {
-		handlerChannel = o.drc
-	} else {
-		panic("hndl error: no input channel for ollama adapter provided")
+	// construct handler - channel is required
+	if rc == nil {
+		return adapters.ContractResponse{
+			ID:        genID,
+			StartedAt: startedAt,
+			Error:     fmt.Errorf("response channel is required"),
+		}
 	}
-	
+	handlerChannel := rc
+
 	// Create a separate message buffer for this request to avoid shared state
 	requestMsgBuffer := make([]adapters.ContractResponseDelta, 0, int(o.cfg.DeltaBufferLimit))
-	
+
 	// per-request sequence counter for ordering
 	var seq uint
 	var handler api.ChatResponseFunc = func(cr api.ChatResponse) error {
@@ -186,7 +171,7 @@ func (o *ollamaAdapter) Process(ctx context.Context, input adapters.ContractInpu
 	ctx2, cancel := context.WithCancel(ctx)
 	bft := time.NewTicker(o.cfg.DeltaTimeDuration)
 	drained := make(chan struct{})
-	
+
 	// Create a local drain function that uses the request-specific buffer
 	drainRequestBuffer := func(ch adapters.ContractResponseChannel) bool {
 		if len(requestMsgBuffer) == 0 {
@@ -205,7 +190,7 @@ func (o *ollamaAdapter) Process(ctx context.Context, input adapters.ContractInpu
 			return false
 		}
 	}
-	
+
 	go func() {
 		defer close(drained)
 		for {
@@ -237,7 +222,7 @@ func (o *ollamaAdapter) Process(ctx context.Context, input adapters.ContractInpu
 func New(
 	provider *ollama.OllamaProvider,
 	cfg adapters.ContractLLMCfg,
-	defaultResponseChannel *adapters.ContractResponseChannel,
+	_ *adapters.ContractResponseChannel, // deprecated, no longer used
 ) adapters.ContractAdapter {
 	if cfg.DeltaTimeDuration == 0 {
 		// Batch deltas a bit longer to avoid word-by-word streaming
@@ -250,8 +235,5 @@ func New(
 	return &ollamaAdapter{
 		op:  provider,
 		cfg: cfg,
-		// initialize with zero length and preallocated capacity to avoid nil entries
-		msgBuffer: make([]adapters.ContractResponseDelta, 0, int(cfg.DeltaBufferLimit)),
-		drc:       defaultResponseChannel,
 	}
 }
