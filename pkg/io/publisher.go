@@ -25,13 +25,19 @@ func (p *Publisher) SendTextDelta(
 ) error {
 
 	if eps, ok := p.reg.FetchTextFanoutEndpoint(userID); ok {
-		for _, ep := range eps {
+		// Debug logging to trace message routing
+		fmt.Printf("[PUBLISHER] Sending text to UserID: %s, SessionID: %s, EndpointCount: %d, Text: %.50s...\n",
+			userID, sessionID, len(eps), text)
+
+		for i, ep := range eps {
+			fmt.Printf("[PUBLISHER] Endpoint %d for UserID %s: %s\n", i, userID, uuid.UUID(ep.ID()).String())
 			_ = ep.SendTextDelta(sessionID, seq, text)
 			// todo: emit error for text misses
 		}
 		return nil
 	}
 	// emit text broadcast failed event
+	fmt.Printf("[PUBLISHER] FAILED: No endpoints found for UserID: %s\n", userID)
 	return fmt.Errorf("couldn't broadcast text")
 }
 

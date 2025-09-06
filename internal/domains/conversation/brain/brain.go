@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -13,122 +14,284 @@ import (
 	"github.com/xpanvictor/xarvis/pkg/Logger"
 	"github.com/xpanvictor/xarvis/pkg/assistant"
 	"github.com/xpanvictor/xarvis/pkg/assistant/adapters"
+	"github.com/xpanvictor/xarvis/pkg/assistant/router"
 	toolsystem "github.com/xpanvictor/xarvis/pkg/tool_system"
 )
 
 type Brain struct {
-	cfg      config.BrainConfig
-	registry toolsystem.Registry
-	executor toolsystem.Executor
-	logger   Logger.Logger
-	adapter  adapters.ContractAdapter // Contract-based LLM adapter
+	cfg          config.BrainConfig
+	registry     toolsystem.Registry
+	executor     toolsystem.Executor
+	logger       Logger.Logger
+	mux          *router.Mux // LLM router/multiplexer
+	defaultModel string      // Default model name to use for requests
 	// memory
 	// msg history
 }
 
-// Brain Decision System using Messages (BDSM)
-// when the brain gets a percept, it enters a thinking <-> acting loop
-// using contract-based LLM processing with tool execution
-func (b *Brain) Decide(ctx context.Context, msg conversation.Message) (conversation.Message, error) {
+// BrainSession represents an active conversation session
+type BrainSession struct {
+	UserID    uuid.UUID
+	SessionID uuid.UUID
+	Messages  []conversation.Message // conversation history
+}
+
+// ProcessMessage handles incoming messages and returns response channel for streaming
+// The caller (BrainSystem) handles the pipeline broadcasting
+func (b *Brain) ProcessMessage(ctx context.Context, session BrainSession, msg conversation.Message) (<-chan []adapters.ContractResponseDelta, error) {
+	// Debug logging for message content
+	b.logger.Infof("Brain processing for UserID %s, SessionID %s: Message = '%s'", 
+		session.UserID.String(), session.SessionID.String(), msg.Text)
+	
 	// Convert conversation message to contract format
 	contractMsgs := []adapters.ContractMessage{msg.ToContractMessage()}
 
+	// Add conversation history
+	for i, histMsg := range session.Messages {
+		b.logger.Infof("Brain adding history message %d for UserID %s: '%s'", 
+			i, session.UserID.String(), histMsg.Text)
+		contractMsgs = append(contractMsgs, histMsg.ToContractMessage())
+	}
+
 	// Get available tools from registry
-	availableTools := b.registry.GetContractTools()
+	// availableTools := b.registry.GetContractTools()
 
 	// Create contract input
+	contractInput := adapters.ContractInput{
+		ID:       uuid.New(),
+		ToolList: []adapters.ContractTool{},
+		Meta:     map[string]interface{}{"user_id": session.UserID.String()},
+		Msgs:     contractMsgs,
+		HandlerModel: adapters.ContractSelectedModel{
+			Name:    b.defaultModel, // Use configurable model name
+			Version: "8b",
+		},
+	}
+
+	// Debug logging to see what model we're actually requesting
+	b.logger.Infof("Processing message with model: %s", b.defaultModel)
+
+	// Create response channel for streaming
+	responseChannel := make(adapters.ContractResponseChannel, 10)
+
+	// Start streaming through mux in goroutine
+	go func() {
+		defer func() {
+			// Safely close channel using recovery to prevent panic
+			defer func() {
+				if r := recover(); r != nil {
+					b.logger.Error(fmt.Sprintf("Recovered from channel close panic: %v", r))
+				}
+			}()
+			// Try to close channel, but recover if it's already closed
+			select {
+			case <-responseChannel:
+				// Channel is already closed
+			default:
+				close(responseChannel)
+			}
+		}()
+
+		err := b.mux.Stream(ctx, contractInput, &responseChannel)
+		if err != nil {
+			b.logger.Error(fmt.Sprintf("Mux streaming error: %v", err))
+
+			// If the error is about tools not being supported, try without tools
+			if strings.Contains(err.Error(), "does not support tools") {
+				b.logger.Info("Model doesn't support tools, retrying without tools")
+
+				// Create a new input without tools
+				contractInputNoTools := adapters.ContractInput{
+					ID:           uuid.New(),
+					ToolList:     []adapters.ContractTool{}, // Empty tool list
+					Meta:         contractInput.Meta,
+					Msgs:         contractInput.Msgs,
+					HandlerModel: contractInput.HandlerModel,
+				}
+
+				// Try again without tools
+				err = b.mux.Stream(ctx, contractInputNoTools, &responseChannel)
+				if err != nil {
+					b.logger.Error(fmt.Sprintf("Failed even without tools: %v", err))
+					// Send error through channel
+					select {
+					case responseChannel <- []adapters.ContractResponseDelta{{Error: err}}:
+					default:
+						b.logger.Error("Could not send fallback error through response channel")
+					}
+				}
+			} else {
+				// Send original error through channel
+				select {
+				case responseChannel <- []adapters.ContractResponseDelta{{Error: err}}:
+				default:
+					b.logger.Error("Could not send error through response channel")
+				}
+			}
+		}
+	}()
+
+	// Return the channel for the caller to handle streaming and tool execution
+	return responseChannel, nil
+}
+
+// ProcessMessageWithToolHandling handles incoming messages with automatic tool execution
+// Returns the final response after processing all tool calls
+func (b *Brain) ProcessMessageWithToolHandling(ctx context.Context, session BrainSession, msg conversation.Message) (conversation.Message, error) {
+	responseChannel, err := b.ProcessMessage(ctx, session, msg)
+	if err != nil {
+		return conversation.Message{}, err
+	}
+
+	// Handle tool execution loop
+	toolCallsCount := 0
+	maxToolCalls := 5 // TODO: Use b.cfg.MaxToolCallLimit when available
+	var finalResponse conversation.Message
+
+	for deltas := range responseChannel {
+		var toolCalls []adapters.ContractToolCall
+		var hasToolCalls bool
+		var messageContent string
+
+		// Process deltas
+		for _, delta := range deltas {
+			// Collect message content
+			if delta.Msg != nil && delta.Msg.Content != "" {
+				messageContent += delta.Msg.Content
+			}
+
+			// Collect tool calls
+			if delta.ToolCalls != nil && len(*delta.ToolCalls) > 0 {
+				toolCalls = append(toolCalls, *delta.ToolCalls...)
+				hasToolCalls = true
+			}
+
+			// Handle errors
+			if delta.Error != nil {
+				return conversation.Message{}, fmt.Errorf("processing error: %w", delta.Error)
+			}
+		}
+
+		// If we have tool calls and haven't exceeded the limit
+		if hasToolCalls && toolCallsCount < maxToolCalls {
+			toolResponses, executedCount := b.ExecuteToolCallsParallel(ctx, toolCalls)
+			toolCallsCount += executedCount
+
+			// For simplicity in this method, append tool results to message content
+			for _, toolResp := range toolResponses {
+				messageContent += fmt.Sprintf("\n[Tool Result: %s]", toolResp.Text)
+			}
+		}
+
+		// Set final response
+		if messageContent != "" {
+			finalResponse = conversation.Message{
+				Id:        uuid.New().String(),
+				UserId:    session.UserID.String(),
+				Text:      messageContent,
+				Timestamp: time.Now(),
+				MsgRole:   assistant.ASSISTANT,
+				Tags:      []string{"brain_response"},
+			}
+		}
+	}
+
+	if finalResponse.Text == "" {
+		return conversation.Message{
+			Id:        uuid.New().String(),
+			UserId:    session.UserID.String(),
+			Text:      "No response generated",
+			Timestamp: time.Now(),
+			MsgRole:   assistant.ASSISTANT,
+			Tags:      []string{"empty_response"},
+		}, nil
+	}
+
+	return finalResponse, nil
+}
+
+// Decide provides a simple non-streaming interface (backwards compatibility)
+func (b *Brain) Decide(ctx context.Context, msg conversation.Message) (conversation.Message, error) {
+	// For simple decide, we'll collect the full response instead of streaming
+	// This is less efficient but provides backwards compatibility
+	contractMsgs := []adapters.ContractMessage{msg.ToContractMessage()}
+
+	availableTools := b.registry.GetContractTools()
+
 	contractInput := adapters.ContractInput{
 		ID:       uuid.New(),
 		ToolList: availableTools,
 		Meta:     map[string]interface{}{"user_id": msg.UserId},
 		Msgs:     contractMsgs,
-		HandlerModel: adapters.ContractSelectedModel{
-			Name:    "llama3", // TODO: Make this configurable
-			Version: "8b",
-		},
 	}
 
-	toolCallsCount := 0
-	maxToolCalls := 5 // Default limit, should use b.cfg.MaxToolCallLimit when available
+	responseChannel := make(adapters.ContractResponseChannel, 10)
 
-	// Process with tool calling loop
-	for toolCallsCount < maxToolCalls {
-		// Create response channel
-		responseChannel := make(adapters.ContractResponseChannel, 10)
-
-		// Process through adapter
-		contractResponse := b.adapter.Process(ctx, contractInput, &responseChannel)
-
-		// Collect response deltas
-		var finalMessage *adapters.ContractMessage
-		var toolCalls []adapters.ContractToolCall
-
-		// Read from response channel until closed
-		for deltas := range responseChannel {
-			for _, delta := range deltas {
-				if delta.Msg != nil {
-					finalMessage = delta.Msg
+	// Start streaming
+	go func() {
+		defer func() {
+			// Safely close channel using recovery to prevent panic
+			defer func() {
+				if r := recover(); r != nil {
+					b.logger.Error(fmt.Sprintf("Recovered from channel close panic in Decide: %v", r))
 				}
-				if delta.ToolCalls != nil && len(*delta.ToolCalls) > 0 {
-					toolCalls = append(toolCalls, *delta.ToolCalls...)
-				}
-				if delta.Error != nil {
-					return conversation.Message{}, fmt.Errorf("LLM processing error: %w", delta.Error)
-				}
+			}()
+			// Try to close channel, but recover if it's already closed
+			select {
+			case <-responseChannel:
+				// Channel is already closed
+			default:
+				close(responseChannel)
+			}
+		}()
+
+		err := b.mux.Stream(ctx, contractInput, &responseChannel)
+		if err != nil {
+			b.logger.Error(fmt.Sprintf("Simple decide streaming error: %v", err))
+			// Send error through channel instead of just logging
+			select {
+			case responseChannel <- []adapters.ContractResponseDelta{{Error: err}}:
+			default:
+				// Channel is full or closed, just log
+				b.logger.Error("Could not send error through response channel in Decide")
 			}
 		}
+	}()
 
-		// Check for errors in the contract response
-		if contractResponse.Error != nil {
-			return conversation.Message{}, fmt.Errorf("contract processing error: %w", contractResponse.Error)
-		}
+	// Collect all responses
+	var finalContent string
+	var toolCalls []adapters.ContractToolCall
 
-		// If no tool calls, we're done
-		if len(toolCalls) == 0 {
-			if finalMessage != nil {
-				// Convert final message back to conversation format
-				return conversation.ContractMsgToMessage(finalMessage, msg.UserId, uuid.New().String()), nil
+	for deltas := range responseChannel {
+		for _, delta := range deltas {
+			if delta.Msg != nil && delta.Msg.Content != "" {
+				finalContent += delta.Msg.Content
 			}
-			// Fallback if no message received
-			return conversation.Message{
-				Id:        uuid.New().String(),
-				UserId:    msg.UserId,
-				Text:      "No response generated",
-				Timestamp: time.Now(),
-				MsgRole:   assistant.ASSISTANT,
-				Tags:      []string{"empty_response"},
-			}, nil
-		}
-
-		// Execute tool calls
-		toolResponses, executedCount := b.ExecuteToolCallsParallel(ctx, toolCalls)
-		toolCallsCount += executedCount
-
-		// Convert tool responses to contract messages and add to conversation
-		for _, toolResponse := range toolResponses {
-			contractMsgs = append(contractMsgs, toolResponse.ToContractMessage())
-		}
-
-		// Update contract input for next iteration
-		contractInput.Msgs = contractMsgs
-	}
-
-	// If we've exceeded tool call limit, return the last assistant message
-	if len(contractMsgs) > 0 {
-		lastMsg := contractMsgs[len(contractMsgs)-1]
-		if lastMsg.Role == adapters.ASSISTANT {
-			return conversation.ContractMsgToMessage(&lastMsg, msg.UserId, uuid.New().String()), nil
+			if delta.ToolCalls != nil && len(*delta.ToolCalls) > 0 {
+				toolCalls = append(toolCalls, *delta.ToolCalls...)
+			}
+			if delta.Error != nil {
+				return conversation.Message{}, fmt.Errorf("decide error: %w", delta.Error)
+			}
 		}
 	}
 
-	// Fallback response
+	// Execute tool calls if any
+	if len(toolCalls) > 0 {
+		toolResponses, _ := b.ExecuteToolCallsParallel(ctx, toolCalls)
+		// For simplicity, append tool results to the final content
+		for _, toolResp := range toolResponses {
+			finalContent += fmt.Sprintf("\n[Tool Result: %s]", toolResp.Text)
+		}
+	}
+
 	return conversation.Message{
 		Id:        uuid.New().String(),
 		UserId:    msg.UserId,
-		Text:      "Maximum tool calls exceeded. Unable to complete processing.",
+		Text:      finalContent,
 		Timestamp: time.Now(),
 		MsgRole:   assistant.ASSISTANT,
-		Tags:      []string{"tool_limit_exceeded"},
+		Tags:      []string{"brain_response"},
 	}, nil
 }
 
@@ -233,14 +396,41 @@ func NewBrain(
 	cfg config.BrainConfig,
 	registry toolsystem.Registry,
 	executor toolsystem.Executor,
-	adapter adapters.ContractAdapter,
+	mux *router.Mux,
 	logger Logger.Logger,
+	defaultModel string,
 ) *Brain {
 	return &Brain{
-		cfg:      cfg,
-		registry: registry,
-		executor: executor,
-		adapter:  adapter,
-		logger:   logger,
+		cfg:          cfg,
+		registry:     registry,
+		executor:     executor,
+		mux:          mux,
+		logger:       logger,
+		defaultModel: defaultModel,
 	}
+}
+
+// Session management methods
+
+// CreateSession creates a new brain session for a user
+func (b *Brain) CreateSession(userID uuid.UUID) BrainSession {
+	return BrainSession{
+		UserID:    userID,
+		SessionID: uuid.New(),
+		Messages:  make([]conversation.Message, 0),
+	}
+}
+
+// AddMessageToSession adds a message to the session history
+func (b *Brain) AddMessageToSession(session *BrainSession, msg conversation.Message) {
+	session.Messages = append(session.Messages, msg)
+}
+
+// GetSessionHistory returns the conversation history for a session
+func (b *Brain) GetSessionHistory(session BrainSession) []adapters.ContractMessage {
+	contractMsgs := make([]adapters.ContractMessage, len(session.Messages))
+	for i, msg := range session.Messages {
+		contractMsgs[i] = msg.ToContractMessage()
+	}
+	return contractMsgs
 }

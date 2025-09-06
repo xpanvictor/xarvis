@@ -161,6 +161,10 @@ func (o *ollamaAdapter) Process(ctx context.Context, input adapters.ContractInpu
 	} else {
 		panic("hndl error: no input channel for ollama adapter provided")
 	}
+	
+	// Create a separate message buffer for this request to avoid shared state
+	requestMsgBuffer := make([]adapters.ContractResponseDelta, 0, int(o.cfg.DeltaBufferLimit))
+	
 	// per-request sequence counter for ordering
 	var seq uint
 	var handler api.ChatResponseFunc = func(cr api.ChatResponse) error {
@@ -169,7 +173,7 @@ func (o *ollamaAdapter) Process(ctx context.Context, input adapters.ContractInpu
 		// assign monotonically increasing index
 		seq++
 		msg.Index = seq
-		o.msgBuffer = append(o.msgBuffer, msg)
+		requestMsgBuffer = append(requestMsgBuffer, msg)
 		if msg.Done {
 			// signal end of processing
 			// no-op; completion is handled after Chat returns
@@ -182,6 +186,26 @@ func (o *ollamaAdapter) Process(ctx context.Context, input adapters.ContractInpu
 	ctx2, cancel := context.WithCancel(ctx)
 	bft := time.NewTicker(o.cfg.DeltaTimeDuration)
 	drained := make(chan struct{})
+	
+	// Create a local drain function that uses the request-specific buffer
+	drainRequestBuffer := func(ch adapters.ContractResponseChannel) bool {
+		if len(requestMsgBuffer) == 0 {
+			return false
+		}
+		// send a copy to avoid races/mutation after send
+		snapshot := make([]adapters.ContractResponseDelta, len(requestMsgBuffer))
+		copy(snapshot, requestMsgBuffer)
+		select {
+		case ch <- snapshot:
+			// clear the buffer after successful send
+			requestMsgBuffer = requestMsgBuffer[:0]
+			return true
+		default:
+			// channel is full, skip this tick
+			return false
+		}
+	}
+	
 	go func() {
 		defer close(drained)
 		for {
@@ -189,7 +213,7 @@ func (o *ollamaAdapter) Process(ctx context.Context, input adapters.ContractInpu
 			case <-ctx2.Done():
 				return
 			case <-bft.C:
-				o.DrainBuffer(*handlerChannel)
+				drainRequestBuffer(*handlerChannel)
 			}
 		}
 	}()
@@ -200,7 +224,7 @@ func (o *ollamaAdapter) Process(ctx context.Context, input adapters.ContractInpu
 	cancel()
 	<-drained
 	// final flush
-	o.DrainBuffer(*handlerChannel)
+	drainRequestBuffer(*handlerChannel)
 	// close downstream channel to signal completion
 	close(*handlerChannel)
 
