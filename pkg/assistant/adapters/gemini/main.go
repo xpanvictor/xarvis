@@ -3,7 +3,6 @@ package gemini
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/google/generative-ai-go/genai"
@@ -56,7 +55,6 @@ func (g *geminiAdapter) Process(ctx context.Context, input adapters.ContractInpu
 			Error:     fmt.Errorf("response channel is required"),
 		}
 	}
-	log.Printf("toools------ %v", input.ToolList)
 	handlerChannel := rc
 
 	modelName := router.GenerateModelName(input.HandlerModel)

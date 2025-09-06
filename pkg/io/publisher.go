@@ -45,13 +45,14 @@ func (p *Publisher) SendAudioFrame(
 	ctx context.Context,
 	userID uuid.UUID,
 	sessionID uuid.UUID,
+	seq int,
 	frame []byte,
 ) error {
 	ep, ok := p.reg.SelectEndpointWithMRU(userID)
 	if !ok || !ep.IsAlive() || !ep.Caps().AudioSink {
 		return fmt.Errorf("couldn't send audio frame")
 	}
-	return ep.SendAudioFrame(sessionID, frame)
+	return ep.SendAudioFrame(sessionID, seq, frame)
 }
 
 func (p *Publisher) SendEvent(

@@ -77,11 +77,13 @@ func (p *Pipeline) Broadcast(
 		}
 		const chunk = 16 * 1024
 		buf := make([]byte, chunk)
+		audioSeq := 0 // Track audio frame sequence
 		for {
 			n, rerr := audioRC.Read(buf)
 			if n > 0 {
-				// publish this audio slice
-				_ = p.pub.SendAudioFrame(ctx, userID, sessionID, buf[:n])
+				audioSeq++
+				// publish this audio slice with sequence number
+				_ = p.pub.SendAudioFrame(ctx, userID, sessionID, audioSeq, buf[:n])
 
 				// Also save to debug file if available
 				if debugFile != nil {
@@ -92,6 +94,11 @@ func (p *Pipeline) Broadcast(
 				if rerr != io.EOF {
 					// optionally log rerr
 				}
+				// Send audio_complete event when audio streaming finishes
+				_ = p.pub.SendEvent(ctx, userID, sessionID, "audio_complete", map[string]interface{}{
+					"timestamp":   time.Now().Unix(),
+					"totalChunks": audioSeq,
+				})
 				return
 			}
 		}

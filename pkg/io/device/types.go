@@ -35,7 +35,7 @@ type Endpoint interface {
 	Transport() Transport
 	// abstraction for publisher
 	SendTextDelta(sessionID uuid.UUID, seq int, text string) error
-	SendAudioFrame(sessionID uuid.UUID, frame []byte) error
+	SendAudioFrame(sessionID uuid.UUID, seq int, frame []byte) error
 	SendEvent(sessionID uuid.UUID, name string, payload any) error
 	Touch()
 	// lifecyle

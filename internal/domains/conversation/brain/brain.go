@@ -49,19 +49,14 @@ func (b *Brain) ProcessMessage(ctx context.Context, session BrainSession, msg co
 		CreatedAt: ct,
 	}
 
-	// Debug logging for message content
-	b.logger.Infof("Brain processing for UserID %s, SessionID %s: Message = '%s'",
-		session.UserID.String(), session.SessionID.String(), msg.Text)
-
 	// Convert conversation message to contract format
-	contractMsgs := []adapters.ContractMessage{systemMessage, msg.ToContractMessage()}
-
+	contractMsgs := []adapters.ContractMessage{systemMessage}
 	// Add conversation history
-	for i, histMsg := range session.Messages {
-		b.logger.Infof("Brain adding history message %d for UserID %s: '%s'",
-			i, session.UserID.String(), histMsg.Text)
+	for _, histMsg := range session.Messages[max(len(session.Messages)-5, len(session.Messages)):] {
 		contractMsgs = append(contractMsgs, histMsg.ToContractMessage())
 	}
+	// final message
+	contractMsgs = append(contractMsgs, msg.ToContractMessage())
 
 	// Get available tools from registry
 	availableTools := b.registry.GetContractTools()

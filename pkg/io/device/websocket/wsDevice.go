@@ -48,11 +48,27 @@ func (w *wsEndpoint) LastActive() time.Time {
 }
 
 // SendAudioFrame implements device.Endpoint.
-func (w *wsEndpoint) SendAudioFrame(sessionID uuid.UUID, frame []byte) error {
-    // prolly handle a few things first
-    // for now direct send
-    // Send audio as binary frames to avoid UTF-8 enforcement on text frames
-    return w.client.WriteMessage(websocket.BinaryMessage, frame)
+func (w *wsEndpoint) SendAudioFrame(sessionID uuid.UUID, seq int, frame []byte) error {
+	// Send audio frame metadata as JSON first
+	metadata := struct {
+		Type      string `json:"type"`
+		Index     int    `json:"index"`
+		SessionID string `json:"sessionId"`
+		Size      int    `json:"size"`
+	}{
+		Type:      "audio_meta",
+		Index:     seq,
+		SessionID: sessionID.String(),
+		Size:      len(frame),
+	}
+
+	// Send metadata as JSON
+	if err := w.client.WriteJSON(metadata); err != nil {
+		return err
+	}
+
+	// Send actual audio data as binary message immediately after
+	return w.client.WriteMessage(websocket.BinaryMessage, frame)
 }
 
 // SendEvent implements device.Endpoint.
