@@ -154,3 +154,9 @@ Xarvis runs a **Brain Decision System (BDSM)** that governs autonomous thinking:
 
 ## 📜 License
 
+### Logs:
+[Mon Sep 8, 25] I shouldn't stream mp3 slices :), it's really terrible to 
+handle on client side. Later on, I'll figure out a better format (I've used
+PCM on a shazam implementation I wrote before). Anyways, lesson learnt, 
+I'll move on to system internals, domains, tool calls and then audio input. 
+God bless.
