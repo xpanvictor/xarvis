@@ -136,7 +136,7 @@ func (g *geminiAdapter) ConvertMsgs(msgs []adapters.ContractMessage) []genai.Par
 		// Gemini handles history differently; we construct a flat list of parts.
 		// Role is inferred by position or can be set on Content.
 		// For simplicity, we'll just send the text content.
-		content := fmt.Sprintf("%s: %s (at %s)", msg.Role, msg.Content, msg.CreatedAt.Local().Format(time.RFC3339))
+		content := fmt.Sprintf("[meta: msg sent at %v from %v] %v\n", msg.CreatedAt.Local(), msg.Role, msg.Content)
 		parts = append(parts, genai.Text(content))
 	}
 	return parts

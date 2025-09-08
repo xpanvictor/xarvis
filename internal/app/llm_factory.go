@@ -44,7 +44,6 @@ func (f *LLMRouterFactory) CreateRouter() (*router.Mux, error) {
 			f.logger.Warnf("failed to create Gemini adapter, skipping: %v", err)
 		} else {
 			createdAdapters = append(createdAdapters, geminiAdapter)
-			f.logger.Info("Gemini adapter created and set as default.")
 		}
 	}
 

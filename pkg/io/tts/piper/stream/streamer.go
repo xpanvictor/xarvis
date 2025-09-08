@@ -73,7 +73,6 @@ func (s *Streamer) FromDeltas(ctx context.Context, deltas <-chan string) (io.Rea
 
 	// Pipe out to caller
 	pr, pw := io.Pipe()
-	log.Printf("streamer: FromDeltas start (Max=%d Min=%d Idle=%s Force=%s)", s.MaxChars, s.MinChars, s.IdleFlush, s.ForceFlush)
 	go s.run(ctx, deltas, pw)
 	return pr, nil
 }

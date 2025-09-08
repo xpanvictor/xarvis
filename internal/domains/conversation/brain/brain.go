@@ -41,18 +41,17 @@ type BrainSession struct {
 func (b *Brain) ProcessMessage(ctx context.Context, session BrainSession, msg conversation.Message) (<-chan []adapters.ContractResponseDelta, error) {
 
 	// generate sys message
-
 	ct := time.Now()
 	systemMessage := adapters.ContractMessage{
 		Role:      adapters.SYSTEM,
-		Content:   fmt.Sprintf("You are an AI agent called Xarvis and you're sort of my second brain. The current time is %v", ct),
+		Content:   fmt.Sprintf("You are an AI agent called Xarvis and you're sort of my second brain. You're a generic all purpose AI and can do or answer everything. You also have a few tools at your disposal. The current time is %v. You don't have to mention this though.", ct),
 		CreatedAt: ct,
 	}
 
 	// Convert conversation message to contract format
 	contractMsgs := []adapters.ContractMessage{systemMessage}
 	// Add conversation history
-	for _, histMsg := range session.Messages[max(len(session.Messages)-5, len(session.Messages)):] {
+	for _, histMsg := range session.Messages {
 		contractMsgs = append(contractMsgs, histMsg.ToContractMessage())
 	}
 	// final message
@@ -72,9 +71,6 @@ func (b *Brain) ProcessMessage(ctx context.Context, session BrainSession, msg co
 			Version: "8b",
 		},
 	}
-
-	// Debug logging to see what model we're actually requesting
-	b.logger.Infof("Processing message with model: %s", b.defaultModel)
 
 	// Create response channel for streaming
 	responseChannel := make(adapters.ContractResponseChannel, 10)

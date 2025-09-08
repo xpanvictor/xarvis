@@ -283,9 +283,9 @@ export const ChatInterface: React.FC = () => {
     // 1. Not already playing/streaming
     // 2. Have enough chunks in buffer 
     // 3. Actually have chunks to play
-    if (!isPlayingRef.current && 
-        !audioStreamRef.current.isStreaming && 
-        audioQueue.length >= 2) {
+    if (!isPlayingRef.current &&
+      !audioStreamRef.current.isStreaming &&
+      audioQueue.length >= 2) {
       console.log(`🚀 Triggering playback: ${audioQueue.length} chunks in buffer`);
       playAudioQueue();
     }
@@ -365,7 +365,7 @@ export const ChatInterface: React.FC = () => {
       // Start of new message (index starts at 1, not 0) - stop any existing audio
       console.log('🔄 New message starting - stopping previous audio');
       stopAllAudio();
-      
+
       const messageId = Date.now().toString();
       currentMessageIdRef.current = messageId;
       currentMessageRef.current = text;
