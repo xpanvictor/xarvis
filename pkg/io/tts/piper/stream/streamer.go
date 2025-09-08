@@ -2,8 +2,6 @@
 package stream
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -112,7 +110,7 @@ func (s *Streamer) run(ctx context.Context, deltas <-chan string, out *io.PipeWr
 			ctxChunk, cancel := context.WithTimeout(ctx, max(50*time.Second, s.TTS.Timeout))
 
 			// log.Printf("streamer: calling DoTTS on `%v` due to [%v]:[%t]", t, reason, force)
-			rc, ct, err := s.TTS.DoTTS(ctxChunk, t, "")
+			rc, _, err := s.TTS.DoTTS(ctxChunk, t, "")
 			if err != nil {
 				log.Printf("streamer: TTS error: %v", err)
 				cancel()
@@ -133,24 +131,14 @@ func (s *Streamer) run(ctx context.Context, deltas <-chan string, out *io.PipeWr
 				return
 			}
 
-			// Now convert to MP3 without any context dependencies
-			mp3Audio, err := ConvertAudioToMP3(bytes.NewReader(audioData), ct)
+			// Now we have raw PCM data - no conversion needed!
+			// Raw PCM can be concatenated directly without any processing
+			_, err = out.Write(audioData)
 			if err != nil {
-				log.Printf("streamer: conversion to mp3 error: %v", err)
+				log.Printf("streamer: failed to write PCM audio: %v", err)
 				out.CloseWithError(err)
 				return
 			}
-			// If WAV, we could strip the WAV header except the first chunk, but
-			// simplest is just write chunks back-to-back; most players handle separate WAVs poorly.
-			// So we decode + re-encode or, simpler: if format is PCM use direct concat.
-			// To keep this example simple, we'll write raw bytes and accept a small boundary click.
-			// In practice, set Format:"pcm_s16le" in TTS and use addFade().
-			br := bufio.NewReader(mp3Audio)
-			var chunk bytes.Buffer
-			io.Copy(&chunk, br)
-			data := chunk.Bytes()
-			// Optional: add small fade at boundaries if PCM
-			_, _ = out.Write(data)
 		}(text)
 		lastFlush = time.Now()
 	}

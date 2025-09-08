@@ -75,7 +75,19 @@ func (p *Pipeline) Broadcast(
 		if debugFile != nil {
 			defer debugFile.Close()
 		}
-		const chunk = 16 * 1024
+
+		// Send PCM format metadata at the start
+		_ = p.pub.SendEvent(ctx, userID, sessionID, "audio_format", map[string]interface{}{
+			"format":        "pcm",
+			"sampleRate":    22050,   // Typical Piper sample rate
+			"channels":      1,       // Mono
+			"bitsPerSample": 16,      // 16-bit signed
+			"encoding":      "s16le", // Little-endian
+		})
+
+		// Use smaller chunks for smoother streaming (4KB = ~90ms at 22050Hz)
+		// This reduces latency and provides smoother continuous playback
+		const chunk = 4 * 1024 // 4KB chunks for better streaming granularity
 		buf := make([]byte, chunk)
 		audioSeq := 0 // Track audio frame sequence
 		for {

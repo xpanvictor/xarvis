@@ -44,13 +44,15 @@ func (p *Piper) DoTTS(ctx context.Context, text string, optVoice string) (io.Rea
 	if voice != "" {
 		q.Set("voice", voice)
 	}
+	// Request raw PCM instead of WAV for easier streaming
+	q.Set("format", "raw")
 	u.RawQuery = q.Encode()
 
 	req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
 	if err != nil {
 		return nil, "", err
 	}
-	req.Header.Set("Accept", "audio/mp3")
+	req.Header.Set("Accept", "audio/pcm")
 
 	hc := p.Client
 	if hc == nil {

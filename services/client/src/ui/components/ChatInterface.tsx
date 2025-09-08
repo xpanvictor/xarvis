@@ -56,18 +56,43 @@ export const ChatInterface: React.FC = () => {
   const audioContextRef = useRef<AudioContext | null>(null);
   const isPlayingRef = useRef<boolean>(false);
 
-  // Audio buffering for MP3 streams
-  const audioBufferRef = useRef<{
-    chunks: Blob[];
-    headerChunk: Blob | null;
-    currentIndex: number;
+  // PCM audio format info (received from backend)
+  const audioFormatRef = useRef<{
+    format: string;
+    sampleRate: number;
+    channels: number;
+    bitsPerSample: number;
+    encoding: string;
+  } | null>(null);
+
+  // Continuous audio streaming state
+  const audioStreamRef = useRef<{
+    currentTime: number;
+    nextStartTime: number;
+    isStreaming: boolean;
   }>({
-    chunks: [],
-    headerChunk: null,
-    currentIndex: 0
+    currentTime: 0,
+    nextStartTime: 0,
+    isStreaming: false
   });
 
-  // Keep ref in sync with state
+  // Track active audio sources for cleanup
+  const activeAudioSourcesRef = useRef<AudioBufferSourceNode[]>([]);
+
+  // Cleanup function to stop all active audio sources
+  const stopAllAudio = () => {
+    console.log(`🛑 Stopping ${activeAudioSourcesRef.current.length} active audio sources`);
+    activeAudioSourcesRef.current.forEach(source => {
+      try {
+        source.stop();
+      } catch (e) {
+        // Source might already be stopped
+      }
+    });
+    activeAudioSourcesRef.current = [];
+    isPlayingRef.current = false;
+    audioStreamRef.current.isStreaming = false;
+  };  // Keep ref in sync with state
   useEffect(() => {
     audioQueueRef.current = audioQueue;
   }, [audioQueue]);
@@ -83,17 +108,24 @@ export const ChatInterface: React.FC = () => {
   // Real-time audio player - automatically plays chunks from queue
   const playAudioQueue = async () => {
     // If already playing, ignore trigger
-    if (isPlayingRef.current) {
+    if (isPlayingRef.current || audioStreamRef.current.isStreaming) {
+      console.log(`🚫 Playback already active - ignoring trigger`);
       return;
     }
 
-    // Check if we have chunks to play using ref
-    if (audioQueueRef.current.length === 0) {
+    // Safety cleanup - stop any lingering audio sources
+    stopAllAudio();
+
+    // Wait for a minimum buffer of chunks to reduce stuttering
+    const minBufferChunks = 2;
+    if (audioQueueRef.current.length < minBufferChunks) {
+      console.log(`🔄 Waiting for buffer... (${audioQueueRef.current.length}/${minBufferChunks} chunks)`);
       return;
     }
 
     isPlayingRef.current = true;
-    console.log(`🎵 Starting audio playback. Queue length: ${audioQueueRef.current.length}`);
+    audioStreamRef.current.isStreaming = true;
+    console.log(`🎵 Starting continuous audio playback. Queue length: ${audioQueueRef.current.length}`);
 
     try {
       // Initialize audio context if needed
@@ -106,41 +138,48 @@ export const ChatInterface: React.FC = () => {
         await audioContextRef.current.resume();
       }
 
-      // Start playing the first chunk
-      playNextChunkRecursive();
+      // Initialize timing for continuous playback
+      audioStreamRef.current.currentTime = audioContextRef.current.currentTime;
+      audioStreamRef.current.nextStartTime = audioStreamRef.current.currentTime + 0.1; // Start slightly in future
+
+      // Start continuous chunk scheduling
+      scheduleNextChunk();
 
     } catch (error) {
       console.error('❌ Audio playback error:', error);
       isPlayingRef.current = false;
+      audioStreamRef.current.isStreaming = false;
     }
   };
 
-  // Recursive function to play chunks one by one
-  const playNextChunkRecursive = () => {
-    // Check if we should continue playing
-    if (!isPlayingRef.current) {
-      console.log('🛑 Playback stopped');
+  // Schedule chunks for continuous playback without gaps
+  const scheduleNextChunk = () => {
+    if (!audioStreamRef.current.isStreaming || !audioContextRef.current) {
       return;
     }
 
-    // Get current queue from ref (always current)
+    // Get current queue
     const currentQueue = audioQueueRef.current;
 
     // If queue is empty, stop playback
     if (currentQueue.length === 0) {
-      console.log(`🎉 Audio playback complete. Queue empty.`);
+      console.log(`🎉 Continuous audio playback complete. Queue empty.`);
       isPlayingRef.current = false;
+      audioStreamRef.current.isStreaming = false;
       return;
     }
 
     // Get the first chunk
     const currentChunk = currentQueue[0];
-    console.log(`🔊 Playing chunk ${currentChunk.index} (${(currentChunk.data.size / 1024).toFixed(2)} KB) - Queue: [${currentQueue.map(c => c.index).join(', ')}]`);
+    console.log(`🔊 Scheduling chunk ${currentChunk.index} at time ${audioStreamRef.current.nextStartTime.toFixed(3)}`);
 
-    // Play the chunk and handle completion
-    playChunkAudio(currentChunk)
-      .then(() => {
-        console.log(`✅ Chunk ${currentChunk.index} finished playing`);
+    // Schedule this chunk for continuous playback
+    playChunkContinuous(currentChunk, audioStreamRef.current.nextStartTime)
+      .then((duration) => {
+        console.log(`✅ Chunk ${currentChunk.index} scheduled successfully (${duration.toFixed(3)}s)`);
+
+        // Update next start time for seamless continuity
+        audioStreamRef.current.nextStartTime += duration;
 
         // Remove played chunk from queue
         setAudioQueue(prev => {
@@ -149,28 +188,32 @@ export const ChatInterface: React.FC = () => {
           return newQueue;
         });
 
-        // Continue with next chunk after brief delay
-        setTimeout(() => playNextChunkRecursive(), 50);
+        // Schedule next chunk immediately (no delay!)
+        setTimeout(() => scheduleNextChunk(), 10);
       })
       .catch(error => {
-        console.error(`❌ Failed to play chunk ${currentChunk.index}:`, error);
+        console.error(`❌ Failed to schedule chunk ${currentChunk.index}:`, error);
 
-        // Remove failed chunk from queue
+        // Remove failed chunk and continue
         setAudioQueue(prev => {
           const newQueue = prev.slice(1);
           console.log(`🗑️ Removed failed chunk ${currentChunk.index}. Remaining: ${newQueue.length} chunks`);
           return newQueue;
         });
 
-        // Continue with next chunk after brief delay
-        setTimeout(() => playNextChunkRecursive(), 50);
+        // Continue with next chunk
+        setTimeout(() => scheduleNextChunk(), 10);
       });
   };
 
-  // Actually play the audio data with better error handling
-  const playChunkAudio = async (chunk: AudioChunk): Promise<void> => {
+  // Play PCM audio chunk with precise timing for continuous playback
+  const playChunkContinuous = async (chunk: AudioChunk, startTime: number): Promise<number> => {
     if (!audioContextRef.current) {
       throw new Error('Audio context not available');
+    }
+
+    if (!audioFormatRef.current) {
+      throw new Error('Audio format not received yet');
     }
 
     try {
@@ -181,37 +224,71 @@ export const ChatInterface: React.FC = () => {
         throw new Error('Empty audio buffer');
       }
 
-      const audioBuffer = await audioContextRef.current.decodeAudioData(arrayBuffer);
+      const format = audioFormatRef.current;
+      const samplesCount = arrayBuffer.byteLength / (format.bitsPerSample / 8);
 
+      // Create AudioBuffer for PCM data
+      const audioBuffer = audioContextRef.current.createBuffer(
+        format.channels,
+        samplesCount,
+        format.sampleRate
+      );
+
+      // Convert raw PCM bytes to float32 samples
+      const channelData = audioBuffer.getChannelData(0);
+
+      if (format.bitsPerSample === 16 && format.encoding === 's16le') {
+        // 16-bit signed little-endian PCM
+        const samples = new Int16Array(arrayBuffer);
+        for (let i = 0; i < samples.length; i++) {
+          channelData[i] = samples[i] / 32768; // Convert to [-1, 1] range
+        }
+      } else {
+        throw new Error(`Unsupported PCM format: ${format.bitsPerSample}-bit ${format.encoding}`);
+      }
+
+      // Schedule the audio buffer to play at precise time
       const source = audioContextRef.current.createBufferSource();
       source.buffer = audioBuffer;
       source.connect(audioContextRef.current.destination);
 
-      return new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          console.error(`⏰ Chunk ${chunk.index} playback timeout`);
-          reject(new Error('Playback timeout'));
-        }, 30000);
+      // Track this source for cleanup
+      activeAudioSourcesRef.current.push(source);
 
-        source.onended = () => {
-          clearTimeout(timeout);
-          resolve();
-        };
+      // Remove from tracking when it ends
+      source.onended = () => {
+        const index = activeAudioSourcesRef.current.indexOf(source);
+        if (index > -1) {
+          activeAudioSourcesRef.current.splice(index, 1);
+        }
+      };
 
-        source.start();
-      });
+      // Start at the precise scheduled time for seamless playback
+      source.start(startTime);
 
-    } catch (error) {
-      // Enhanced error logging for audio decode issues
-      if (error instanceof DOMException && error.message.includes('unknown content type')) {
-        console.error(`🔍 Chunk ${chunk.index} decode error - likely corrupted or invalid audio data`);
-        console.error(`🔍 Chunk size: ${chunk.data.size} bytes, MIME type: ${chunk.data.type}`);
-      }
+      // Return the duration of this chunk for timing next chunk
+      const duration = audioBuffer.duration;
+      console.log(`⏰ Chunk ${chunk.index} duration: ${duration.toFixed(3)}s, scheduled at: ${startTime.toFixed(3)}s`);
+
+      return duration;
+
+    } catch (error: any) {
+      console.error(`🔍 PCM Chunk ${chunk.index} scheduling error:`, error);
+      console.error(`🔍 Chunk size: ${chunk.data.size} bytes`);
       throw error;
     }
-  };  // Trigger audio playback when queue changes (new chunks arrive)
+  };  // Trigger audio playback intelligently - only when we have buffer AND not already playing
   useEffect(() => {
-    playAudioQueue();
+    // Only trigger if:
+    // 1. Not already playing/streaming
+    // 2. Have enough chunks in buffer 
+    // 3. Actually have chunks to play
+    if (!isPlayingRef.current && 
+        !audioStreamRef.current.isStreaming && 
+        audioQueue.length >= 2) {
+      console.log(`🚀 Triggering playback: ${audioQueue.length} chunks in buffer`);
+      playAudioQueue();
+    }
   }, [audioQueue]);
 
   const connectWebSocket = useCallback(() => {
@@ -285,7 +362,10 @@ export const ChatInterface: React.FC = () => {
     console.log(`handleTextDelta: index=${index}, text="${text}", currentMessageId=${currentMessageIdRef.current}`);
 
     if (index === 1 || !currentMessageIdRef.current) {
-      // Start of new message (index starts at 1, not 0)
+      // Start of new message (index starts at 1, not 0) - stop any existing audio
+      console.log('🔄 New message starting - stopping previous audio');
+      stopAllAudio();
+      
       const messageId = Date.now().toString();
       currentMessageIdRef.current = messageId;
       currentMessageRef.current = text;
@@ -321,190 +401,46 @@ export const ChatInterface: React.FC = () => {
     }
   };
 
-  // Audio format detection utility - optimized for known MP3 streams
-  const detectAudioFormat = async (blob: Blob, chunkIndex: number): Promise<string> => {
-    // Since backend always sends MP3, we can optimize this
-    if (blob.size < 12) {
-      console.log(`Chunk ${chunkIndex}: Too small for header analysis, using audio/mpeg`);
-      return 'audio/mpeg';
-    }
-
-    const arrayBuffer = await blob.slice(0, 12).arrayBuffer();
-    const bytes = new Uint8Array(arrayBuffer);
-
-    // Quick check for MP3 headers (ID3 tag or MP3 frame sync)
-    if (bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33) {
-      console.log(`Chunk ${chunkIndex}: MP3 with ID3 header detected`);
-      return 'audio/mpeg';
-    }
-    if (bytes[0] === 0xFF && (bytes[1] & 0xE0) === 0xE0) {
-      console.log(`Chunk ${chunkIndex}: MP3 frame sync detected`);
-      return 'audio/mpeg';
-    }
-
-    // For known MP3 stream, log but don't warn
-    console.log(`Chunk ${chunkIndex}: MP3 streaming data (no header), size: ${blob.size} bytes`);
-    return 'audio/mpeg';
-  };
-
-  // Check if an audio chunk is individually playable (has complete headers)
-  const isChunkPlayable = async (blob: Blob): Promise<boolean> => {
-    if (blob.size < 12) return false;
-
-    const arrayBuffer = await blob.slice(0, 12).arrayBuffer();
-    const bytes = new Uint8Array(arrayBuffer);
-
-    // Check for MP3 ID3 header or MP3 frame sync at the beginning
-    const hasID3Header = bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33;
-    const hasMP3Sync = bytes[0] === 0xFF && (bytes[1] & 0xE0) === 0xE0;
-
-    return hasID3Header || hasMP3Sync;
-  };  // Handle audio frames - buffer chunks and create complete audio files
+  // Handle audio frames - simple PCM chunk queuing
   const handleAudioFrame = async (audioMeta: AudioMessage, audioData: Blob) => {
     const chunkSizeKB = (audioData.size / 1024).toFixed(2);
-    console.log(`📦 Audio chunk ${audioMeta.index}: ${chunkSizeKB} KB`);
+    console.log(`📦 PCM Audio chunk ${audioMeta.index}: ${chunkSizeKB} KB`);
 
     // Verify data integrity
     if (audioData.size !== audioMeta.size) {
       console.warn(`⚠️ Size mismatch chunk ${audioMeta.index}: expected ${audioMeta.size}, got ${audioData.size}`);
     }
 
-    // Skip empty or very small chunks that are likely corrupted
-    if (audioData.size < 100) {
-      console.warn(`⚠️ Chunk ${audioMeta.index} too small (${audioData.size} bytes), skipping`);
+    // Skip empty chunks
+    if (audioData.size === 0) {
+      console.warn(`⚠️ Chunk ${audioMeta.index} is empty, skipping`);
       return;
     }
 
     try {
-      const isPlayable = await isChunkPlayable(audioData);
-
-      if (isPlayable) {
-        // This chunk has a complete header - process any buffered chunks first
-        await flushAudioBuffer();
-
-        // Store this as the new header chunk for future streaming data
-        audioBufferRef.current.headerChunk = audioData;
-        audioBufferRef.current.currentIndex = audioMeta.index;
-
-        // Add this complete chunk to the queue
-        const audioChunk: AudioChunk = {
-          index: audioMeta.index,
-          data: new Blob([audioData], { type: 'audio/mpeg' }),
-          received: true
-        };
-
-        setAudioQueue(prev => {
-          const newQueue = [...prev, audioChunk].sort((a, b) => a.index - b.index);
-          console.log(`🎵 Queue updated: ${newQueue.length} chunks [${newQueue.map(c => c.index).join(', ')}]`);
-          return newQueue;
-        });
-
-        console.log(`✅ Added complete chunk ${audioMeta.index} to queue`);
-      } else {
-        // This is streaming data - buffer it
-        audioBufferRef.current.chunks.push(audioData);
-        console.log(`🔄 Buffering chunk ${audioMeta.index} (${audioBufferRef.current.chunks.length} buffered chunks)`);
-
-        // If we have enough buffered chunks or this is the last expected chunk, flush the buffer
-        if (audioBufferRef.current.chunks.length >= 5) {
-          await flushAudioBuffer();
-        }
-      }
-
-      // Trigger playback if not already playing
-      if (!isPlayingRef.current) {
-        setTimeout(() => playAudioQueue(), 100);
-      }
-
-    } catch (error) {
-      console.error(`Error processing audio chunk ${audioMeta.index}:`, error);
-    }
-  };
-
-  // Flush buffered audio chunks by combining them with the last header
-  const flushAudioBuffer = async () => {
-    const buffer = audioBufferRef.current;
-
-    if (buffer.chunks.length === 0) {
-      return; // Nothing to flush
-    }
-
-    if (!buffer.headerChunk) {
-      console.warn('⚠️ No header chunk available for buffered audio data, skipping buffer flush');
-      buffer.chunks = []; // Clear buffer
-      return;
-    }
-
-    try {
-      // Extract header from the last complete chunk
-      const headerData = await extractMP3Header(buffer.headerChunk);
-
-      if (!headerData) {
-        console.warn('⚠️ Could not extract header from reference chunk');
-        buffer.chunks = []; // Clear buffer
-        return;
-      }
-
-      // Combine header with all buffered chunks
-      const combinedChunks = [headerData, ...buffer.chunks];
-      const combinedBlob = new Blob(combinedChunks, { type: 'audio/mpeg' });
-
-      // Create a new audio chunk with combined data
-      const combinedIndex = buffer.currentIndex + buffer.chunks.length;
+      // Create audio chunk - PCM data is directly playable
       const audioChunk: AudioChunk = {
-        index: combinedIndex,
-        data: combinedBlob,
+        index: audioMeta.index,
+        data: audioData, // Raw PCM data
         received: true
       };
 
+      // Add to queue in order
       setAudioQueue(prev => {
         const newQueue = [...prev, audioChunk].sort((a, b) => a.index - b.index);
-        console.log(`🎵 Queue updated with buffered audio: ${newQueue.length} chunks [${newQueue.map(c => c.index).join(', ')}]`);
+        console.log(`🎵 PCM Queue updated: ${newQueue.length} chunks [${newQueue.map(c => c.index).join(', ')}]`);
         return newQueue;
       });
 
-      console.log(`✅ Flushed ${buffer.chunks.length} buffered chunks as combined audio chunk ${combinedIndex}`);
+      console.log(`✅ Added PCM chunk ${audioMeta.index} to queue`);
 
-      // Clear the buffer
-      buffer.chunks = [];
-      buffer.currentIndex = combinedIndex;
-
-    } catch (error) {
-      console.error('Error flushing audio buffer:', error);
-      buffer.chunks = []; // Clear buffer on error
-    }
-  };
-
-  // Extract MP3 header from a complete audio chunk
-  const extractMP3Header = async (blob: Blob): Promise<Blob | null> => {
-    try {
-      const arrayBuffer = await blob.arrayBuffer();
-      const bytes = new Uint8Array(arrayBuffer);
-
-      // Look for ID3 header
-      if (bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33) {
-        // ID3v2 header found
-        const headerSize = ((bytes[6] & 0x7F) << 21) | ((bytes[7] & 0x7F) << 14) |
-          ((bytes[8] & 0x7F) << 7) | (bytes[9] & 0x7F) + 10;
-
-        // Include ID3 header + first MP3 frame for proper header
-        const headerEndIndex = Math.min(headerSize + 1024, arrayBuffer.byteLength);
-        return new Blob([arrayBuffer.slice(0, headerEndIndex)], { type: 'audio/mpeg' });
+      // Trigger playback if not already playing and we have enough buffer
+      if (!isPlayingRef.current && !audioStreamRef.current.isStreaming) {
+        setTimeout(() => playAudioQueue(), 50);
       }
 
-      // Look for MP3 frame sync and extract first frame as header
-      for (let i = 0; i < Math.min(1024, bytes.length - 1); i++) {
-        if (bytes[i] === 0xFF && (bytes[i + 1] & 0xE0) === 0xE0) {
-          // Found MP3 frame sync, extract first 1KB as header
-          const headerEndIndex = Math.min(i + 1024, arrayBuffer.byteLength);
-          return new Blob([arrayBuffer.slice(0, headerEndIndex)], { type: 'audio/mpeg' });
-        }
-      }
-
-      return null;
     } catch (error) {
-      console.error('Error extracting MP3 header:', error);
-      return null;
+      console.error(`Error processing PCM audio chunk ${audioMeta.index}:`, error);
     }
   };
 
@@ -513,12 +449,9 @@ export const ChatInterface: React.FC = () => {
     console.log('handleLegacyAudioFrame called - converting to indexed audio');
 
     try {
-      const mimeType = await detectAudioFormat(audioData, 1);
-      console.log(`Detected MIME type for legacy chunk:`, mimeType);
-
       const audioChunk: AudioChunk = {
         index: 1, // Legacy audio is treated as single chunk
-        data: new Blob([audioData], { type: mimeType }),
+        data: audioData, // Use raw data directly
         received: true
       };
 
@@ -526,26 +459,20 @@ export const ChatInterface: React.FC = () => {
       setAudioQueue([audioChunk]);
       console.log(`🎵 Queue updated (legacy): 1 chunk [1]`);
 
-      // Update current message with audio indicator for UI
-      setMessages(prev => prev.map(msg =>
-        msg.id === currentMessageIdRef.current
-          ? { ...msg, audioChunks: [{ index: 1, data: new Blob(), received: true }] }
-          : msg
-      ));
-
     } catch (error) {
       console.error('Error processing legacy audio frame:', error);
     }
   };
 
-  const handleEvent = (eventName: string, payload: any) => {
+  const handleEvent = async (eventName: string, payload: any) => {
     console.log('Received event:', eventName, payload);
 
-    if (eventName === 'message_complete') {
-      // Flush any remaining buffered chunks before marking message complete
-      flushAudioBuffer();
-
-      // Mark current message as complete
+    if (eventName === 'audio_format') {
+      // Store PCM format information from backend
+      audioFormatRef.current = payload;
+      console.log('🎵 Audio format received:', payload);
+    } else if (eventName === 'message_complete') {
+      // Mark current message as complete (no buffering needed for PCM)
       setMessages(prev => prev.map(msg =>
         msg.id === currentMessageIdRef.current
           ? { ...msg, isStreaming: false }
@@ -565,6 +492,9 @@ export const ChatInterface: React.FC = () => {
 
     return () => {
       wsRef.current?.close();
+
+      // Stop all audio playback and clean up
+      stopAllAudio();
 
       // Clean up audio context
       if (audioContextRef.current) {

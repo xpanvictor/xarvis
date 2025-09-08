@@ -160,3 +160,5 @@ handle on client side. Later on, I'll figure out a better format (I've used
 PCM on a shazam implementation I wrote before). Anyways, lesson learnt, 
 I'll move on to system internals, domains, tool calls and then audio input. 
 God bless.
+[same day 30 mins later] I decided to just switch to pcm and it's fine actually. Although did the conversion with AI, it's stuttering a bit but ok.
+I just couldn't sleep with the issue left.
