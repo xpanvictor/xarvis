@@ -25,3 +25,6 @@ but only outputs
 
 ### Initial system arch:
 <img src="/docs/assets/stt_v1.jpeg" alt="Initial diagram" title="Initial arch" style="transform: rotate(90deg);" />
+
+Follows thread management here:
+<img src="/docs/assets/thread_mngm.jpeg" alt="Thread diagram" title="Thread mngm" style="transform: rotate(90deg);" />
