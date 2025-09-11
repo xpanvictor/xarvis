@@ -37,7 +37,7 @@ services:
     command:
       - "--api.insecure=true"
       - "--providers.docker=true"
-      - "--providers.docker.network=xarvis_backend"
+      - "--providers.docker.network=edge"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
       - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
@@ -87,6 +87,7 @@ services:
     labels:
       # Traefik labels for HTTPS API
       - "traefik.enable=true"
+      - "traefik.docker.network=edge"
       - "traefik.http.routers.xarvis.rule=Host(`xarvis.xpan9.tech`) && PathPrefix(`/v1/app`)"
       - "traefik.http.routers.xarvis.entrypoints=websecure"
       - "traefik.http.routers.xarvis.tls.certresolver=letsencrypt"
@@ -141,6 +142,7 @@ services:
       <<: *health
     labels:
       - "traefik.enable=true"
+      - "traefik.docker.network=edge"
       - "traefik.http.routers.sys-models.rule=Host(`xarvis.xpan9.tech`) && PathPrefix(`/v1/models`)"
       - "traefik.http.routers.sys-models.entrypoints=websecure"
       - "traefik.http.routers.sys-models.tls.certresolver=letsencrypt"
@@ -303,6 +305,7 @@ services:
       <<: *health-dev
     labels:
       - "traefik.enable=true"
+      - "traefik.docker.network=edge"
       - "traefik.http.routers.client.rule=Host(`xarvis.xpan9.tech`)"
       - "traefik.http.routers.client.entrypoints=websecure"
       - "traefik.http.routers.client.tls.certresolver=letsencrypt"
