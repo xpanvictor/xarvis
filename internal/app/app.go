@@ -58,6 +58,7 @@ func (a *App) setupDependencies() error {
 		a.LLMRouter,
 		a.Config.BrainConfig,
 		a.Logger,
+		a.Config,
 	)
 
 	return nil

@@ -20,6 +20,11 @@ type Pipeline struct {
 	pub *xio.Publisher   // abstracts MQTT/WS publishing
 }
 
+type GenericEvent struct {
+	Key   string
+	Value any
+}
+
 func New(str *stream.Streamer, pub *xio.Publisher) Pipeline {
 	return Pipeline{
 		str: str,
@@ -181,4 +186,13 @@ pumpLoop:
 	}
 
 	return nil
+}
+
+func (p *Pipeline) SendEvent(
+	ctx context.Context,
+	userID uuid.UUID,
+	sessionID uuid.UUID,
+	event GenericEvent,
+) {
+	p.pub.SendEvent(ctx, userID, sessionID, event.Key, event.Value)
 }

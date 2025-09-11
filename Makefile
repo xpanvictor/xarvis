@@ -10,7 +10,7 @@ help:
 	@echo "  make restart     - Restart xarvis-core"
 	@echo "  make logs        - Tail logs of xarvis-core"
 	@echo "  make proxy       - Add Traefik reverse proxy (/v1/* routes)"
-	@echo "  make voice       - Add Whisper STT + Piper TTS"
+	@echo "  make voice       - Add System Models (VAD) + Whisper STT + Piper TTS"
 	@echo "  make ai          - Add local AI services (Ollama, Embeddings-TEI)"
 	@echo "  make qdrant      - Add Qdrant vector backend"
 	@echo "  make tidb        - Add local TiDB for dev (Serverless preferred in prod)"
@@ -34,7 +34,7 @@ proxy:
 	$(DOCKER_COMPOSE) --profile proxy up -d traefik
 
 voice:
-	$(DOCKER_COMPOSE) --profile voice up -d stt-whisper tts-piper
+	$(DOCKER_COMPOSE) --profile voice up -d sys-models stt-whisper tts-piper
 
 ai:
 	$(DOCKER_COMPOSE) --profile ai-local up -d ollama embeddings-tei

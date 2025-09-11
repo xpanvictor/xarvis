@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/xpanvictor/xarvis/pkg/io/registry"
+	memoryregistry "github.com/xpanvictor/xarvis/pkg/io/registry/memoryRegistry"
 )
 
 type Publisher struct {
@@ -48,7 +49,7 @@ func (p *Publisher) SendAudioFrame(
 	seq int,
 	frame []byte,
 ) error {
-	ep, ok := p.reg.SelectEndpointWithMRU(userID)
+	ep, ok := p.reg.SelectEndpointWithMRU(userID, memoryregistry.RequireAudioSink())
 	if !ok || !ep.IsAlive() || !ep.Caps().AudioSink {
 		return fmt.Errorf("couldn't send audio frame")
 	}

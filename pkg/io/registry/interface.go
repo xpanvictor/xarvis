@@ -17,6 +17,6 @@ type DeviceRegistry interface {
 	ListUserDevices(userID uuid.UUID) []device.Device
 	ListUserEndpoints(userID uuid.UUID) []device.Endpoint
 	// selection
-	SelectEndpointWithMRU(userID uuid.UUID) (device.Endpoint, bool)
+	SelectEndpointWithMRU(userID uuid.UUID, reqCap *device.Capabilities) (device.Endpoint, bool)
 	FetchTextFanoutEndpoint(userID uuid.UUID) ([]device.Endpoint, bool)
 }

@@ -22,8 +22,13 @@ const (
 )
 
 type Capabilities struct {
-	AudioSink bool // can sink audio
-	TextSink  bool // can sink audio
+	AudioSink  bool // can sink audio
+	TextSink   bool // can sink audio
+	AudioWrite bool // can write audio
+}
+
+func (c *Capabilities) Compare(other *Capabilities) bool {
+	return c.AudioSink == other.AudioSink && c.TextSink == other.TextSink && c.AudioWrite == other.AudioWrite
 }
 
 type EndpointID uuid.UUID

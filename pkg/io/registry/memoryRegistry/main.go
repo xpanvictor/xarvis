@@ -99,21 +99,58 @@ func (m *mmrRegistry) TouchDevice(userID uuid.UUID, deviceID uuid.UUID) error {
 
 // SelectEndpointWithMRU implements registry.Registry.
 // todo: efficiency: rebalancing tree instead
-func (m *mmrRegistry) SelectEndpointWithMRU(userID uuid.UUID) (device.Endpoint, bool) {
+func (m *mmrRegistry) SelectEndpointWithMRU(userID uuid.UUID, reqCap *device.Capabilities) (device.Endpoint, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	if userMap, exists := m.dvMap[userID]; exists {
-		devices := slices.SortedFunc(maps.Values(userMap), func(a, b *device.Device) int { return a.LastActive.Compare(b.LastActive) })
-		if len(devices) > 0 {
-			if mrd := devices[0]; mrd != nil {
-				se := slices.SortedFunc(maps.Values(mrd.Endpoints), func(a, b device.Endpoint) int { return a.LastActive().Compare(b.LastActive()) })
-				if len(se) > 0 {
+		// Sort devices by most recently used (descending order)
+		devices := slices.SortedFunc(maps.Values(userMap), func(a, b *device.Device) int {
+			return b.LastActive.Compare(a.LastActive) // Note: b first for descending order
+		})
+
+		// Check each device starting with most recently used
+		for _, d := range devices {
+			if d != nil && len(d.Endpoints) > 0 {
+				// Sort endpoints by most recently used (descending order)
+				se := slices.SortedFunc(maps.Values(d.Endpoints), func(a, b device.Endpoint) int {
+					return b.LastActive().Compare(a.LastActive()) // Note: b first for descending order
+				})
+
+				// If no capability requirements, return the most recent endpoint
+				if reqCap == nil {
 					return se[0], true
+				}
+
+				// Check each endpoint for capability match
+				for _, e := range se {
+					if matchesCapabilities(e.Caps(), reqCap) {
+						return e, true
+					}
 				}
 			}
 		}
 	}
 	return nil, false
+}
+
+// matchesCapabilities checks if endpoint capabilities satisfy the requirements
+func matchesCapabilities(epCaps device.Capabilities, reqCaps *device.Capabilities) bool {
+	if reqCaps == nil {
+		return true
+	}
+
+	// Check each required capability
+	if reqCaps.AudioSink && !epCaps.AudioSink {
+		return false
+	}
+	if reqCaps.TextSink && !epCaps.TextSink {
+		return false
+	}
+	if reqCaps.AudioWrite && !epCaps.AudioWrite {
+		return false
+	}
+
+	return true
 }
 
 // UpsertDevice implements registry.Registry.
@@ -128,6 +165,53 @@ func (m *mmrRegistry) UpsertDevice(userID uuid.UUID, d device.Device) error {
 	// }
 	m.dvMap[userID][d.DeviceID] = &d
 	return nil
+}
+
+// Helper functions to create capability requirements
+
+// RequireAudioSink creates capability requirements for audio sink only
+func RequireAudioSink() *device.Capabilities {
+	return &device.Capabilities{
+		AudioSink:  true,
+		TextSink:   false,
+		AudioWrite: false,
+	}
+}
+
+// RequireTextSink creates capability requirements for text sink only
+func RequireTextSink() *device.Capabilities {
+	return &device.Capabilities{
+		AudioSink:  false,
+		TextSink:   true,
+		AudioWrite: false,
+	}
+}
+
+// RequireAudioWrite creates capability requirements for audio write only
+func RequireAudioWrite() *device.Capabilities {
+	return &device.Capabilities{
+		AudioSink:  false,
+		TextSink:   false,
+		AudioWrite: true,
+	}
+}
+
+// RequireAudioSinkAndTextSink creates capability requirements for both audio and text sink
+func RequireAudioSinkAndTextSink() *device.Capabilities {
+	return &device.Capabilities{
+		AudioSink:  true,
+		TextSink:   true,
+		AudioWrite: false,
+	}
+}
+
+// RequireAllCapabilities creates capability requirements for all capabilities
+func RequireAllCapabilities() *device.Capabilities {
+	return &device.Capabilities{
+		AudioSink:  true,
+		TextSink:   true,
+		AudioWrite: true,
+	}
 }
 
 func New() registry.DeviceRegistry {

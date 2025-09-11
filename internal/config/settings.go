@@ -58,12 +58,23 @@ type BrainConfig struct {
 	MaxToolCallLimit int `mapstructure:"max_tool_call_limit"`
 }
 
+type SysModelsConfig struct {
+	BaseURL string `mapstructure:"base_url"`
+}
+
+type VoiceConfig struct {
+	STTURL string `mapstructure:"stt_url"`
+	TTSURL string `mapstructure:"tts_url"`
+}
+
 type Settings struct {
 	DB            DBConfig         `mapstructure:"database"`
 	AssistantKeys AssistantKeysObj `mapstructure:"assistantKeys"`
 	Env           string           `mapstructure:"env"`
 	Debug         bool             `mapstructure:"debug" default:"false"`
 	BrainConfig   BrainConfig
+	SysModels     SysModelsConfig `mapstructure:"sys_models"`
+	Voice         VoiceConfig     `mapstructure:"voice"`
 }
 
 func Load() (*Settings, error) {

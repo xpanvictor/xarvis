@@ -1,0 +1,345 @@
+/* Audio Input Styles */
+
+.input-mode-toggle {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding: 4px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+}
+
+.mode-button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: #6c757d;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.mode-button:hover {
+    background: #e9ecef;
+    color: #495057;
+}
+
+.mode-button.active {
+    background: #007bff;
+    color: white;
+    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.2);
+}
+
+.mode-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Audio Input Controls */
+.audio-input-controls {
+    padding: 16px;
+    background: #f8f9fa;
+    border-radius: 12px;
+    border: 1px solid #e9ecef;
+}
+
+.audio-error {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 16px;
+    background: #f8d7da;
+    border: 1px solid #f5c6cb;
+    border-radius: 12px;
+    color: #721c24;
+}
+
+.error-content {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+}
+
+.error-title {
+    font-weight: 600;
+    font-size: 16px;
+    color: #721c24;
+}
+
+.error-message {
+    font-size: 14px;
+    color: #856404;
+    line-height: 1.4;
+}
+
+.error-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.retry-button {
+    padding: 8px 16px;
+    border: 1px solid #dc3545;
+    border-radius: 6px;
+    background: white;
+    color: #dc3545;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.retry-button:hover {
+    background: #dc3545;
+    color: white;
+}
+
+.fallback-button {
+    padding: 8px 16px;
+    border: 1px solid #6c757d;
+    border-radius: 6px;
+    background: white;
+    color: #6c757d;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.fallback-button:hover {
+    background: #6c757d;
+    color: white;
+}
+
+.audio-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.listening-status {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.listening-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    border: 2px solid #dee2e6;
+    background: white;
+    transition: all 0.3s ease;
+}
+
+.listening-indicator.passive {
+    border-color: #28a745;
+    background: rgba(40, 167, 69, 0.1);
+}
+
+.listening-indicator.active {
+    border-color: #dc3545;
+    background: rgba(220, 53, 69, 0.1);
+    animation: pulse 2s infinite;
+}
+
+.listening-indicator .recording {
+    color: #dc3545;
+    animation: recording-pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+
+    0%,
+    100% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.05);
+    }
+}
+
+@keyframes recording-pulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.6;
+    }
+}
+
+.listening-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.listening-mode {
+    font-weight: 600;
+    font-size: 16px;
+    color: #495057;
+}
+
+.listening-status-text {
+    font-size: 14px;
+    color: #6c757d;
+}
+
+.listening-mode-controls {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.listening-mode-indicator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border: 1px solid #dee2e6;
+    border-radius: 20px;
+    background: white;
+    color: #495057;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.listening-mode-indicator.passive {
+    border-color: #28a745;
+    color: #28a745;
+    background: rgba(40, 167, 69, 0.05);
+}
+
+.listening-mode-indicator.active {
+    border-color: #dc3545;
+    color: #dc3545;
+    background: rgba(220, 53, 69, 0.05);
+    animation: pulse 2s infinite;
+}
+
+.push-to-talk {
+    padding: 10px 20px;
+    border: 2px solid #007bff;
+    border-radius: 20px;
+    background: #f8f9fa;
+    color: #007bff;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    user-select: none;
+}
+
+.push-to-talk:hover {
+    background: #007bff;
+    color: white;
+    transform: translateY(-1px);
+}
+
+.push-to-talk:active {
+    background: #0056b3;
+    border-color: #0056b3;
+    transform: translateY(0);
+}
+
+/* Audio Permission Notice */
+.audio-permission-notice {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 12px;
+    background: #fff3cd;
+    border: 1px solid #ffeaa7;
+    border-radius: 8px;
+    color: #856404;
+    font-size: 14px;
+    margin-top: 8px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .input-mode-toggle {
+        margin-bottom: 8px;
+    }
+
+    .mode-button {
+        flex: 1;
+        justify-content: center;
+        padding: 10px 8px;
+    }
+
+    .listening-status {
+        gap: 12px;
+    }
+
+    .listening-indicator {
+        width: 40px;
+        height: 40px;
+    }
+
+    .listening-mode-controls {
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .listening-mode-button,
+    .push-to-talk {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+    .input-mode-toggle {
+        background: #343a40;
+        border-color: #495057;
+    }
+
+    .mode-button {
+        color: #adb5bd;
+    }
+
+    .mode-button:hover {
+        background: #495057;
+        color: #f8f9fa;
+    }
+
+    .audio-input-controls {
+        background: #343a40;
+        border-color: #495057;
+    }
+
+    .listening-indicator {
+        background: #495057;
+        border-color: #6c757d;
+    }
+
+    .listening-mode-button {
+        background: #495057;
+        border-color: #6c757d;
+        color: #f8f9fa;
+    }
+
+    .audio-permission-notice {
+        background: #664d03;
+        border-color: #997404;
+        color: #fff3cd;
+    }
+}

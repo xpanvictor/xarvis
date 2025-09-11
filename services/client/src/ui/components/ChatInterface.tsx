@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, User, Bot } from 'lucide-react';
+import { Send, User, Bot, Mic, MicOff, Keyboard, Volume2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import './AudioInput.css';
 
 interface Message {
   id: string;
@@ -31,6 +32,17 @@ interface AudioMessage {
   size: number;
 }
 
+// Audio input modes
+type InputMode = 'typing' | 'listening';
+type ListeningMode = 'passive' | 'active';
+
+interface AudioInputState {
+  isRecording: boolean;
+  hasPermission: boolean;
+  permissionError: string | null;
+  isProcessing: boolean;
+}
+
 export const ChatInterface: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -43,12 +55,31 @@ export const ChatInterface: React.FC = () => {
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected');
+
+  // Audio input state
+  const [inputMode, setInputMode] = useState<InputMode>('typing');
+  const [listeningMode, setListeningMode] = useState<ListeningMode>('passive');
+  const [audioInputState, setAudioInputState] = useState<AudioInputState>({
+    isRecording: false,
+    hasPermission: false,
+    permissionError: null,
+    isProcessing: false
+  });
+
+  // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const currentMessageRef = useRef<string>('');
   const currentMessageIdRef = useRef<string>('');
   const pendingAudioMetadataRef = useRef<AudioMessage | null>(null);
+
+  // Audio recording refs
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioContextRef2 = useRef<AudioContext | null>(null);
+  const audioStreamRef2 = useRef<MediaStream | null>(null);
+  const audioWorkletRef = useRef<AudioWorkletNode | null>(null);
+  const recordingStateRef = useRef<boolean>(false);
 
   // Audio queue and real-time playback
   const [audioQueue, setAudioQueue] = useState<AudioChunk[]>([]);
@@ -291,6 +322,311 @@ export const ChatInterface: React.FC = () => {
     }
   }, [audioQueue]);
 
+  // Request microphone permissions
+  const requestAudioPermission = useCallback(async () => {
+    // Set processing state
+    setAudioInputState(prev => ({
+      ...prev,
+      isProcessing: true,
+      permissionError: null
+    }));
+
+    // Check if mediaDevices API is available
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      const errorMsg = 'Media devices not supported in this browser or context';
+      console.error('❌ ' + errorMsg);
+      setAudioInputState(prev => ({
+        ...prev,
+        hasPermission: false,
+        permissionError: errorMsg,
+        isProcessing: false
+      }));
+      return false;
+    }
+
+    // Check if we're in a secure context (HTTPS or localhost)
+    if (!window.isSecureContext && window.location.hostname !== 'localhost') {
+      const errorMsg = 'Microphone access requires HTTPS or localhost';
+      console.error('❌ ' + errorMsg);
+      setAudioInputState(prev => ({
+        ...prev,
+        hasPermission: false,
+        permissionError: errorMsg,
+        isProcessing: false
+      }));
+      return false;
+    }
+
+    try {
+      console.log('🎤 Requesting microphone permission...');
+
+      // First check if permission is already granted
+      if (navigator.permissions) {
+        try {
+          const permissionStatus = await navigator.permissions.query({ name: 'microphone' as PermissionName });
+          console.log('Current permission state:', permissionStatus.state);
+
+          if (permissionStatus.state === 'denied') {
+            throw new Error('Microphone permission was previously denied. Please enable it in browser settings.');
+          }
+        } catch (permError) {
+          // Permission API might not be fully supported, continue with getUserMedia
+          console.log('Permission API not fully supported, proceeding with getUserMedia');
+        }
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      });
+
+      // Test successful - we have permission
+      setAudioInputState(prev => ({
+        ...prev,
+        hasPermission: true,
+        permissionError: null,
+        isProcessing: false
+      }));
+
+      // Stop the test stream
+      stream.getTracks().forEach(track => track.stop());
+      console.log('✅ Microphone permission granted');
+
+      return true;
+    } catch (error: any) {
+      console.error('❌ Microphone permission denied:', error);
+
+      let errorMessage = 'Microphone access denied';
+
+      if (error.name === 'NotAllowedError') {
+        errorMessage = 'Microphone permission denied by user. Please allow microphone access and try again.';
+      } else if (error.name === 'NotFoundError') {
+        errorMessage = 'No microphone found. Please check your audio devices.';
+      } else if (error.name === 'NotReadableError') {
+        errorMessage = 'Microphone is already in use by another application.';
+      } else if (error.name === 'OverconstrainedError') {
+        errorMessage = 'Microphone does not support the requested audio format.';
+      } else if (error.name === 'SecurityError') {
+        errorMessage = 'Microphone access blocked by security policy. Try using HTTPS or localhost.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
+      setAudioInputState(prev => ({
+        ...prev,
+        hasPermission: false,
+        permissionError: errorMessage,
+        isProcessing: false
+      }));
+      return false;
+    }
+  }, []);
+
+  // Start audio recording with real-time PCM streaming
+  const startAudioRecording = useCallback(async () => {
+    if (recordingStateRef.current) return;
+
+    console.log('🎤 Starting audio recording...');
+
+    try {
+      // Get microphone stream (let browser choose optimal sample rate)
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      });
+
+      audioStreamRef2.current = stream;
+
+      // Create audio context for PCM processing (use default sample rate)
+      audioContextRef2.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+
+      const source = audioContextRef2.current.createMediaStreamSource(stream);
+
+      // Create a script processor for real-time PCM extraction (larger buffer for efficiency)
+      const processor = audioContextRef2.current.createScriptProcessor(16384, 1, 1); // 16KB buffer instead of 4KB
+
+      let frameCount = 0;
+      let audioBuffer: Int16Array[] = [];
+      let lastSendTime = Date.now();
+      const SEND_INTERVAL_MS = 200; // Send audio every 200ms instead of every frame
+      const MAX_BUFFER_SIZE = 5; // Maximum number of frames to buffer
+
+      processor.onaudioprocess = (e) => {
+        if (!recordingStateRef.current) {
+          return;
+        }
+
+        const inputBuffer = e.inputBuffer;
+        const inputData = inputBuffer.getChannelData(0);
+
+        // Convert float32 to int16 PCM
+        const pcmData = new Int16Array(inputData.length);
+        for (let i = 0; i < inputData.length; i++) {
+          pcmData[i] = Math.max(-32768, Math.min(32767, inputData[i] * 32768));
+        }
+
+        // Add to buffer
+        audioBuffer.push(pcmData);
+        frameCount++;
+
+        // Send buffered audio every SEND_INTERVAL_MS or when buffer is full
+        const now = Date.now();
+        if (now - lastSendTime >= SEND_INTERVAL_MS || audioBuffer.length >= MAX_BUFFER_SIZE) {
+          if (audioBuffer.length > 0) {
+            // Combine all buffered frames into one larger chunk
+            const totalSamples = audioBuffer.reduce((sum, chunk) => sum + chunk.length, 0);
+            const combinedPcm = new Int16Array(totalSamples);
+            let offset = 0;
+
+            for (const chunk of audioBuffer) {
+              combinedPcm.set(chunk, offset);
+              offset += chunk.length;
+            }
+
+            // Calculate stats for logging
+            const maxAmplitude = Math.max(...Array.from(combinedPcm).map(sample => Math.abs(sample / 32768)));
+            const actualSampleRate = audioContextRef2.current?.sampleRate || 44100;
+
+            // Send combined chunk
+            sendAudioFrame(combinedPcm.buffer, actualSampleRate, 1);
+
+            // Clear buffer
+            audioBuffer = [];
+            lastSendTime = now;
+          }
+        }
+      };
+
+      source.connect(processor);
+      processor.connect(audioContextRef2.current.destination);
+
+      recordingStateRef.current = true;
+      setAudioInputState(prev => ({ ...prev, isRecording: true }));
+
+      console.log('✅ Audio recording started successfully!');
+      console.log(`🎤 Audio context state: ${audioContextRef2.current.state}`);
+      console.log(`🎤 Audio context sample rate: ${audioContextRef2.current.sampleRate}Hz`);
+      console.log(`🎤 Stream active: ${stream.active}`);
+      console.log(`🎤 Stream tracks: ${stream.getTracks().length}`);
+      console.log(`🎤 Stream settings:`, stream.getTracks()[0]?.getSettings());
+
+    } catch (error: any) {
+      console.error('❌ Failed to start audio recording:', error);
+      setAudioInputState(prev => ({
+        ...prev,
+        permissionError: error.message || 'Failed to start recording'
+      }));
+    }
+  }, []);
+
+  // Stop audio recording
+  const stopAudioRecording = useCallback(() => {
+    console.log('🛑 Stopping audio recording...');
+
+    recordingStateRef.current = false;
+
+    if (audioStreamRef2.current) {
+      console.log(`🛑 Stopping ${audioStreamRef2.current.getTracks().length} audio tracks`);
+      audioStreamRef2.current.getTracks().forEach(track => track.stop());
+      audioStreamRef2.current = null;
+    }
+
+    if (audioContextRef2.current) {
+      console.log('🛑 Closing audio context');
+      audioContextRef2.current.close();
+      audioContextRef2.current = null;
+    }
+
+    setAudioInputState(prev => ({ ...prev, isRecording: false }));
+    console.log('✅ Audio recording stopped completely');
+  }, []);
+
+  // Audio flow control state
+  const audioSendQueueRef = useRef<ArrayBuffer[]>([]);
+  const isSendingAudioRef = useRef(false);
+  const audioSendRateLimitRef = useRef({ count: 0, resetTime: Date.now() });
+
+  // Send PCM audio frame to backend with flow control
+  const sendAudioFrame = useCallback((pcmBuffer: ArrayBuffer, sampleRate: number, channels: number) => {
+    if (wsRef.current?.readyState !== WebSocket.OPEN) {
+      console.warn(`📡 WebSocket not connected (state: ${wsRef.current?.readyState}), dropping audio frame`);
+      return;
+    }
+
+    // Rate limiting: max 10 audio frames per second
+    const now = Date.now();
+    if (now - audioSendRateLimitRef.current.resetTime > 1000) {
+      audioSendRateLimitRef.current = { count: 0, resetTime: now };
+    }
+
+    if (audioSendRateLimitRef.current.count >= 10) {
+      console.warn('📡 Audio rate limit exceeded, dropping frame');
+      return;
+    }
+
+    // Queue size limit: drop frames if queue is too full
+    if (audioSendQueueRef.current.length > 3) {
+      console.warn('📡 Audio send queue full, dropping oldest frame');
+      audioSendQueueRef.current.shift(); // Remove oldest frame
+    }
+
+    // Create binary message: 4 bytes sample rate + 2 bytes channels + 2 bytes padding + PCM data
+    const header = new ArrayBuffer(8);
+    const headerView = new DataView(header);
+
+    headerView.setUint32(0, sampleRate, true); // Little endian
+    headerView.setUint16(4, channels, true);   // Little endian
+    headerView.setUint16(6, 0, true);          // Reserved padding
+
+    // Combine header and PCM data
+    const combinedBuffer = new Uint8Array(header.byteLength + pcmBuffer.byteLength);
+    combinedBuffer.set(new Uint8Array(header), 0);
+    combinedBuffer.set(new Uint8Array(pcmBuffer), header.byteLength);
+
+    // Add to queue and process
+    audioSendQueueRef.current.push(combinedBuffer.buffer);
+    audioSendRateLimitRef.current.count++;
+
+    // Process queue
+    processAudioSendQueue();
+
+    console.log(`📡 QUEUED AUDIO: ${pcmBuffer.byteLength} bytes PCM, ${sampleRate}Hz, ${channels}ch, queue size: ${audioSendQueueRef.current.length}`);
+  }, []);
+
+  // Process audio send queue with throttling
+  const processAudioSendQueue = useCallback(() => {
+    if (isSendingAudioRef.current || audioSendQueueRef.current.length === 0) {
+      return;
+    }
+
+    isSendingAudioRef.current = true;
+
+    const processNext = () => {
+      if (audioSendQueueRef.current.length === 0) {
+        isSendingAudioRef.current = false;
+        return;
+      }
+
+      const buffer = audioSendQueueRef.current.shift();
+      if (buffer && wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(buffer);
+      }
+
+      // Small delay to prevent overwhelming the WebSocket
+      setTimeout(processNext, 50); // 50ms delay between sends
+    };
+
+    processNext();
+  }, []);
+
   const connectWebSocket = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
@@ -304,7 +640,9 @@ export const ChatInterface: React.FC = () => {
     wsRef.current = new WebSocket(wsUrl);
 
     wsRef.current.onopen = () => {
-      console.log('WebSocket connected');
+      console.log('🔗 WebSocket connected successfully!');
+      console.log(`🔗 WebSocket URL: ${wsUrl}`);
+      console.log(`🔗 WebSocket ready state: ${wsRef.current?.readyState}`);
       setConnectionStatus('connected');
     };
 
@@ -344,8 +682,6 @@ export const ChatInterface: React.FC = () => {
         }
       } else {
         // Handle binary messages (audio frames) - store only, no playback
-        console.log('Received binary audio frame, size:', event.data.byteLength || event.data.size);
-
         if (pendingAudioMetadataRef.current) {
           // Use metadata from previous message
           handleAudioFrame(pendingAudioMetadataRef.current, event.data);
@@ -484,24 +820,76 @@ export const ChatInterface: React.FC = () => {
       currentMessageRef.current = '';
     } else if (eventName === 'audio_complete') {
       console.log(`Audio complete event received. Total chunks: ${payload?.totalChunks}. Current queue length: ${audioQueue.length}`);
+    } else if (eventName === 'listening_mode_change') {
+      // Backend can trigger active/passive mode changes
+      const newMode = payload?.data;
+      console.log("listening mode change", newMode, payload)
+      if (newMode === 'active' || newMode === 'passive') {
+        console.log(`🎧 Backend requested listening mode change: ${listeningMode} -> ${newMode}`);
+        setListeningMode(newMode as ListeningMode);
+      }
     }
   };
 
+  // Handle input mode changes
+  const handleInputModeChange = useCallback(async (mode: InputMode) => {
+    if (mode === inputMode) return;
+
+    console.log(`🔄 Switching input mode: ${inputMode} -> ${mode}`);
+    console.log(`🔍 Current audio state:`, audioInputState);
+
+    if (mode === 'listening') {
+      // Request permission first
+      console.log(`🎤 Requesting audio permission...`);
+      const hasPermission = await requestAudioPermission();
+      console.log(`🎤 Permission result:`, hasPermission);
+
+      if (!hasPermission) {
+        console.error('Cannot switch to listening mode - no microphone permission');
+        return;
+      }
+
+      // Start recording in passive mode
+      console.log(`🎤 Switching to listening mode and starting recording...`);
+      setInputMode('listening');
+      setListeningMode('passive');
+      await startAudioRecording();
+
+    } else {
+      // Switch to typing mode
+      console.log(`⌨️ Switching to typing mode and stopping recording...`);
+      stopAudioRecording();
+      setInputMode('typing');
+    }
+  }, [inputMode, requestAudioPermission, startAudioRecording, stopAudioRecording, audioInputState]);
+
+
+
+  // Initialize and cleanup
   useEffect(() => {
     connectWebSocket();
+
+    // Don't request audio permission on mount to avoid early permission prompts
+    // Permission will be requested when user switches to listening mode
 
     return () => {
       wsRef.current?.close();
 
+      // Stop audio recording
+      stopAudioRecording();
+
       // Stop all audio playback and clean up
       stopAllAudio();
 
-      // Clean up audio context
+      // Clean up audio contexts
       if (audioContextRef.current) {
         audioContextRef.current.close();
       }
+      if (audioContextRef2.current) {
+        audioContextRef2.current.close();
+      }
     };
-  }, [connectWebSocket]);
+  }, [connectWebSocket, stopAudioRecording]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -616,30 +1004,151 @@ export const ChatInterface: React.FC = () => {
       </div>
 
       <div className="input-container">
-        <form onSubmit={handleSubmit} className="input-form">
-          <textarea
-            ref={inputRef}
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyPress={handleKeyPress}
-            onInput={adjustTextareaHeight}
-            placeholder={
-              connectionStatus === 'connected'
-                ? "Type your message to Xarvis..."
-                : `Cannot send messages - ${connectionStatus}`
-            }
-            className="input-field"
-            disabled={isLoading || connectionStatus !== 'connected'}
-            rows={1}
-          />
+        {/* Input Mode Toggle */}
+        <div className="input-mode-toggle">
           <button
-            type="submit"
-            disabled={!inputValue.trim() || isLoading || connectionStatus !== 'connected'}
-            className="send-button"
+            type="button"
+            onClick={() => handleInputModeChange('typing')}
+            className={`mode-button ${inputMode === 'typing' ? 'active' : ''}`}
+            title="Switch to typing mode"
           >
-            <Send size={18} />
+            <Keyboard size={16} />
+            <span>Type</span>
           </button>
-        </form>
+          <button
+            type="button"
+            onClick={() => handleInputModeChange('listening')}
+            className={`mode-button ${inputMode === 'listening' ? 'active' : ''}`}
+            title="Switch to listening mode"
+            disabled={!!audioInputState.permissionError || audioInputState.isProcessing}
+          >
+            <Mic size={16} />
+            <span>{audioInputState.isProcessing ? 'Requesting...' : 'Listen'}</span>
+          </button>
+        </div>
+
+        {/* Text Input Form (when in typing mode) */}
+        {inputMode === 'typing' && (
+          <form onSubmit={handleSubmit} className="input-form">
+            <textarea
+              ref={inputRef}
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyPress={handleKeyPress}
+              onInput={adjustTextareaHeight}
+              placeholder={
+                connectionStatus === 'connected'
+                  ? "Type your message to Xarvis..."
+                  : `Cannot send messages - ${connectionStatus}`
+              }
+              className="input-field"
+              disabled={isLoading || connectionStatus !== 'connected'}
+              rows={1}
+            />
+            <button
+              type="submit"
+              disabled={!inputValue.trim() || isLoading || connectionStatus !== 'connected'}
+              className="send-button"
+            >
+              <Send size={18} />
+            </button>
+          </form>
+        )}
+
+        {/* Audio Input Controls (when in listening mode) */}
+        {inputMode === 'listening' && (
+          <div className="audio-input-controls">
+            {audioInputState.permissionError ? (
+              <div className="audio-error">
+                <MicOff size={20} />
+                <div className="error-content">
+                  <span className="error-title">Microphone Access Issue</span>
+                  <span className="error-message">{audioInputState.permissionError}</span>
+                  <div className="error-actions">
+                    <button
+                      type="button"
+                      onClick={requestAudioPermission}
+                      className="retry-button"
+                    >
+                      Try Again
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleInputModeChange('typing')}
+                      className="fallback-button"
+                    >
+                      Use Typing Instead
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="audio-controls">
+                <div className="listening-status">
+                  <div className={`listening-indicator ${listeningMode}`}>
+                    {audioInputState.isRecording ? (
+                      <Mic size={20} className="recording" />
+                    ) : (
+                      <MicOff size={20} />
+                    )}
+                  </div>
+                  <div className="listening-info">
+                    <span className="listening-mode">
+                      {listeningMode === 'passive' ? 'Passive Listening' : 'Active Listening'}
+                    </span>
+                    <span className="listening-status-text">
+                      {audioInputState.isRecording
+                        ? '🎤 Listening for voice input...'
+                        : 'Microphone ready'
+                      }
+                    </span>
+                  </div>
+                </div>
+
+                {/* Listening Mode Display */}
+                <div className="listening-mode-controls">
+                  <div className={`listening-mode-indicator ${listeningMode}`}>
+                    {listeningMode === 'passive' ? (
+                      <>
+                        <Volume2 size={16} />
+                        <span>Passive Listening</span>
+                      </>
+                    ) : (
+                      <>
+                        <Mic size={16} />
+                        <span>Active Listening</span>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Push-to-talk button */}
+                  <button
+                    type="button"
+                    className="push-to-talk"
+                    onMouseDown={() => setListeningMode('active')}
+                    onMouseUp={() => setListeningMode('passive')}
+                    onMouseLeave={() => setListeningMode('passive')}
+                    title="Hold to activate push-to-talk"
+                  >
+                    Hold to Talk
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Audio Permission Status */}
+        {!audioInputState.hasPermission && !audioInputState.permissionError && (
+          <div className="audio-permission-notice">
+            <span>🎤 Microphone permission needed for voice input</span>
+            {!window.isSecureContext && window.location.hostname !== 'localhost' && (
+              <span style={{ fontSize: '12px', marginTop: '4px', color: '#dc3545' }}>
+                ⚠️ Voice input requires HTTPS or localhost
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
