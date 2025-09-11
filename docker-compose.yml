@@ -134,15 +134,17 @@ services:
     volumes:
       # Live-reload: bind mount source for development
       - ./services/sys-models:/app
-    networks: [ backend ]
+    networks: [ backend, edge ]
     ports: [ "8001:8001" ]
     healthcheck:
       test: [ "CMD", "python", "-c", "import requests; requests.get('http://localhost:8001/health').raise_for_status()" ]
       <<: *health
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.sys-models.rule=PathPrefix(`/v1/models`)"
-      - "traefik.http.routers.sys-models.entrypoints=web"
+      - "traefik.http.routers.sys-models.rule=Host(`xarvis.xpan9.tech`) && PathPrefix(`/v1/models`)"
+      - "traefik.http.routers.sys-models.entrypoints=websecure"
+      - "traefik.http.routers.sys-models.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.sys-models.priority=90"
       - "traefik.http.services.sys-models.loadbalancer.server.port=8001"
       - "traefik.http.middlewares.sys-models-strip.stripprefix.prefixes=/v1/models"
       - "traefik.http.routers.sys-models.middlewares=sys-models-strip@docker"
@@ -156,7 +158,7 @@ services:
     environment:
       ASR_MODEL: base.en
       ASR_ENGINE: openai_whisper
-    networks: [ backend ]
+    networks: [ backend, edge ]
     ports: [ "8080:9000" ]
     healthcheck:
       # Check if the whisper service is responding
@@ -164,8 +166,10 @@ services:
       <<: *health
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.stt.rule=PathPrefix(`/v1/stt`)"
-      - "traefik.http.routers.stt.entrypoints=web"
+      - "traefik.http.routers.stt.rule=Host(`xarvis.xpan9.tech`) && PathPrefix(`/v1/stt`)"
+      - "traefik.http.routers.stt.entrypoints=websecure"
+      - "traefik.http.routers.stt.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.stt.priority=90"
       - "traefik.http.services.stt.loadbalancer.server.port=9000"
       - "traefik.http.middlewares.stt-strip.stripprefix.prefixes=/v1/stt"
       - "traefik.http.routers.stt.middlewares=stt-strip@docker"
@@ -182,7 +186,7 @@ services:
       PGID: 1000
       TZ: ${TZ:-Etc/UTC}
       PIPER_VOICE: en_US-libritts-high
-    networks: [ backend ]
+    networks: [ backend, edge ]
     # LinuxServer Piper exposes 10200 in-container; map to 5002 externally
     ports: [ "5002:10200", "5003:5000" ]
     volumes:
@@ -194,8 +198,10 @@ services:
       <<: *health
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.tts.rule=PathPrefix(`/v1/tts`)"
-      - "traefik.http.routers.tts.entrypoints=web"
+      - "traefik.http.routers.tts.rule=Host(`xarvis.xpan9.tech`) && PathPrefix(`/v1/tts`)"
+      - "traefik.http.routers.tts.entrypoints=websecure"
+      - "traefik.http.routers.tts.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.tts.priority=90"
       - "traefik.http.services.tts.loadbalancer.server.port=10200"
       - "traefik.http.middlewares.tts-strip.stripprefix.prefixes=/v1/tts"
       - "traefik.http.routers.tts.middlewares=tts-strip@docker"
@@ -205,7 +211,7 @@ services:
     profiles: [ "ai-local" ]
     image: ollama/ollama:latest
     restart: unless-stopped
-    networks: [ backend ]
+    networks: [ backend, edge ]
     ports: [ "11434:11434" ]
     volumes:
       - ./infra/models/ollama:/root/.ollama
@@ -220,8 +226,10 @@ services:
       start_period: 60s
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.ollama.rule=PathPrefix(`/v1/llm/ollama`)"
-      - "traefik.http.routers.ollama.entrypoints=web"
+      - "traefik.http.routers.ollama.rule=Host(`xarvis.xpan9.tech`) && PathPrefix(`/v1/llm/ollama`)"
+      - "traefik.http.routers.ollama.entrypoints=websecure"
+      - "traefik.http.routers.ollama.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.ollama.priority=90"
       - "traefik.http.services.ollama.loadbalancer.server.port=11434"
       - "traefik.http.middlewares.ollama-strip.stripprefix.prefixes=/v1/llm/ollama"
       - "traefik.http.routers.ollama.middlewares=ollama-strip@docker"
@@ -233,7 +241,7 @@ services:
     environment:
       MODEL_ID: mixedbread-ai/mxbai-embed-large-v1
       NUM_SHARD: "1"
-    networks: [ backend ]
+    networks: [ backend, edge ]
     ports: [ "8083:80" ]
     volumes:
       - tei_data:/data
@@ -242,8 +250,10 @@ services:
       <<: *health
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.embed.rule=PathPrefix(`/v1/embed`)"
-      - "traefik.http.routers.embed.entrypoints=web"
+      - "traefik.http.routers.embed.rule=Host(`xarvis.xpan9.tech`) && PathPrefix(`/v1/embed`)"
+      - "traefik.http.routers.embed.entrypoints=websecure"
+      - "traefik.http.routers.embed.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.embed.priority=90"
       - "traefik.http.services.embed.loadbalancer.server.port=80"
       - "traefik.http.middlewares.embed-strip.stripprefix.prefixes=/v1/embed"
       - "traefik.http.routers.embed.middlewares=embed-strip@docker"
@@ -253,7 +263,7 @@ services:
     profiles: [ "vector-qdrant" ]
     image: qdrant/qdrant:latest
     restart: unless-stopped
-    networks: [ backend ]
+    networks: [ backend, edge ]
     ports: [ "6333:6333" ]
     volumes:
       - qdrant_data:/qdrant/storage
@@ -262,8 +272,10 @@ services:
       <<: *health
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.qdrant.rule=PathPrefix(`/v1/vector`)"
-      - "traefik.http.routers.qdrant.entrypoints=web"
+      - "traefik.http.routers.qdrant.rule=Host(`xarvis.xpan9.tech`) && PathPrefix(`/v1/vector`)"
+      - "traefik.http.routers.qdrant.entrypoints=websecure"
+      - "traefik.http.routers.qdrant.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.qdrant.priority=90"
       - "traefik.http.services.qdrant.loadbalancer.server.port=6333"
       - "traefik.http.middlewares.qdrant-strip.stripprefix.prefixes=/v1/vector"
       - "traefik.http.routers.qdrant.middlewares=qdrant-strip@docker"
@@ -314,8 +326,9 @@ services:
       <<: *health
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.client-prod.rule=PathPrefix(`/`)"
-      - "traefik.http.routers.client-prod.entrypoints=web"
+      - "traefik.http.routers.client-prod.rule=Host(`xarvis.xpan9.tech`)"
+      - "traefik.http.routers.client-prod.entrypoints=websecure"
+      - "traefik.http.routers.client-prod.tls.certresolver=letsencrypt"
       - "traefik.http.routers.client-prod.priority=1"
       - "traefik.http.services.client-prod.loadbalancer.server.port=80"
 
