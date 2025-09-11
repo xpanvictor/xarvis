@@ -22,7 +22,7 @@ RUN go build -o bin/api ./cmd/api/main.go
 # Note: No worker binary in this repo; skip building worker
 
 # Stage 1.5: Dev with hot reload (Air)
-FROM golang:1.24-alpine AS dev
+FROM golang:1.25-alpine AS dev
 
 # For dev, don't force GOOS/GOARCH; match build platform
 ENV CGO_ENABLED=0 \
