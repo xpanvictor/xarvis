@@ -25,6 +25,7 @@ volumes:
   qdrant_data:
   ollama_data:
   tei_data:
+  traefik_letsencrypt:
 
 
 services:
@@ -38,20 +39,26 @@ services:
       - "--providers.docker=true"
       - "--providers.docker.network=xarvis_backend"
       - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.email=xpanvictor@gmail.com"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--entrypoints.web.http.redirections.entrypoint.permanent=true"
     ports:
       - "80:80"
+      - "443:443"
       - "8081:8080" # dashboard
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik_letsencrypt:/letsencrypt
     networks: [ edge, backend ]
     healthcheck:
       test: [ "CMD", "wget", "-qO-", "http://localhost:8080/api/rawdata" ]
       <<: *health
     labels:
       - "traefik.enable=true"
-      # Caddy labels - expose Traefik to handle all xarvis routing
-      - "caddy=xarvis.xpan9.tech"
-      - "caddy.reverse_proxy={{upstreams 8082}}"
 
   # ───────────────────────── Xarvis Core (Go) ─────────────────────────
   xarvis-core:
@@ -78,10 +85,11 @@ services:
       test: [ "CMD", "wget", "-qO-", "http://localhost:8088/health" ]
       <<: *health
     labels:
-      # Traefik labels (keep for local routing)
+      # Traefik labels for HTTPS
       - "traefik.enable=true"
-      - "traefik.http.routers.xarvis.rule=PathPrefix(`/v1/app`)"
-      - "traefik.http.routers.xarvis.entrypoints=web"
+      - "traefik.http.routers.xarvis.rule=Host(`xarvis.xpan9.tech`) && PathPrefix(`/v1/app`)"
+      - "traefik.http.routers.xarvis.entrypoints=websecure"
+      - "traefik.http.routers.xarvis.tls.certresolver=letsencrypt"
       - "traefik.http.routers.xarvis.priority=100"
       - "traefik.http.services.xarvis.loadbalancer.server.port=8088"
       - "traefik.http.middlewares.xarvis-strip.stripprefix.prefixes=/v1/app"
@@ -220,7 +228,7 @@ services:
       MODEL_ID: mixedbread-ai/mxbai-embed-large-v1
       NUM_SHARD: "1"
     networks: [ backend ]
-    ports: [ "8082:80" ]
+    ports: [ "8083:80" ]
     volumes:
       - tei_data:/data
     healthcheck:
@@ -277,8 +285,9 @@ services:
       <<: *health-dev
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.client.rule=PathPrefix(`/`)"
-      - "traefik.http.routers.client.entrypoints=web"
+      - "traefik.http.routers.client.rule=Host(`xarvis.xpan9.tech`)"
+      - "traefik.http.routers.client.entrypoints=websecure"
+      - "traefik.http.routers.client.tls.certresolver=letsencrypt"
       - "traefik.http.routers.client.priority=1"
       - "traefik.http.services.client.loadbalancer.server.port=5173"
 

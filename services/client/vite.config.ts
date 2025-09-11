@@ -7,6 +7,12 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true,
+    allowedHosts: [
+      'www.xpan9.tech',
+      'xarvis.xpan9.tech',
+      'localhost',
+      '127.0.0.1'
+    ],
     proxy: {
       '/v1': {
         target: 'http://xarvis-core:8088',
