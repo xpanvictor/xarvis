@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/xpanvictor/xarvis/internal/domains/conversation"
 )
 
 // OffTimeRange represents a time range when the user is not available
@@ -18,7 +19,7 @@ type OffTimeRange struct {
 // User represents a user in the system (pure domain model)
 // @Description User account information
 type User struct {
-	ID          string          `json:"id" example:"550e8400-e29b-41d4-a716-446655440000"`
+	ID          uuid.UUID       `json:"id" example:"550e8400-e29b-41d4-a716-446655440000"`
 	DisplayName string          `json:"displayName" example:"John Doe"`
 	Email       string          `json:"email" example:"john@example.com"`
 	Timezone    string          `json:"timezone" example:"America/New_York"`
@@ -27,6 +28,8 @@ type User struct {
 	Password    string          `json:"-"` // Never expose in JSON
 	CreatedAt   time.Time       `json:"createdAt" example:"2023-01-01T12:00:00Z"`
 	UpdatedAt   time.Time       `json:"updatedAt" example:"2023-01-01T12:00:00Z"`
+	// Relationships
+	ManagedConversation conversation.Conversation
 }
 
 // CreateUserRequest represents the data needed to create a new user
@@ -71,7 +74,7 @@ type UserResponse struct {
 // ToResponse converts a User to UserResponse (removes sensitive data)
 func (u *User) ToResponse() UserResponse {
 	return UserResponse{
-		ID:          u.ID,
+		ID:          u.ID.String(),
 		DisplayName: u.DisplayName,
 		Email:       u.Email,
 		Timezone:    u.Timezone,
@@ -85,7 +88,7 @@ func (u *User) ToResponse() UserResponse {
 // NewUser creates a new user with generated ID
 func NewUser(req CreateUserRequest, hashedPassword string) *User {
 	return &User{
-		ID:          uuid.New().String(),
+		ID:          uuid.New(),
 		DisplayName: req.DisplayName,
 		Email:       req.Email,
 		Password:    hashedPassword,

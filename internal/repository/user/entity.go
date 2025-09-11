@@ -18,7 +18,7 @@ type OffTimeRangeEntity struct {
 
 // UserEntity represents the database entity for User with GORM tags
 type UserEntity struct {
-	ID          string               `gorm:"primaryKey;type:char(36);not null"`
+	ID          uuid.UUID            `gorm:"primaryKey;type:char(36);not null"`
 	DisplayName string               `gorm:"column:display_name;type:varchar(255);not null"`
 	Email       string               `gorm:"uniqueIndex;type:varchar(191);not null"`
 	Timezone    string               `gorm:"type:varchar(64);default:UTC"`
@@ -37,8 +37,8 @@ func (UserEntity) TableName() string {
 
 // BeforeCreate is a GORM hook to ensure UUID is set
 func (u *UserEntity) BeforeCreate(tx *gorm.DB) error {
-	if u.ID == "" {
-		u.ID = uuid.New().String()
+	if u.ID == uuid.Nil {
+		u.ID = uuid.New()
 	}
 	return nil
 }

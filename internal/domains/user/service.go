@@ -123,7 +123,7 @@ func (s *userService) Login(ctx context.Context, req LoginRequest) (*UserRespons
 	}
 
 	// Generate tokens
-	tokens, err := s.generateTokens(user.ID, user.Email)
+	tokens, err := s.generateTokens(user.ID.String(), user.Email)
 	if err != nil {
 		s.logger.Errorf("error generating tokens: %v", err)
 		return nil, nil, fmt.Errorf("failed to generate tokens: %w", err)
@@ -157,7 +157,7 @@ func (s *userService) RefreshToken(ctx context.Context, refreshToken string) (*A
 	}
 
 	// Generate new tokens
-	newTokens, err := s.generateTokens(user.ID, user.Email)
+	newTokens, err := s.generateTokens(user.ID.String(), user.Email)
 	if err != nil {
 		s.logger.Errorf("error generating new tokens: %v", err)
 		return nil, fmt.Errorf("failed to generate tokens: %w", err)

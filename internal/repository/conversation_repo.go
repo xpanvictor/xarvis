@@ -6,7 +6,7 @@ import (
 )
 
 type GormConvoRepo struct {
-	db *gorm.DB
+	// db *gorm.DB
 }
 
 // CreateMessage implements conversation.ConversationRepository.
@@ -25,5 +25,6 @@ func (g GormConvoRepo) FetchUserMessages(userId string) ([]conversation.Message,
 }
 
 func NewGormConversationRepo(db *gorm.DB) conversation.ConversationRepository {
-	return GormConvoRepo{db: db}
+	// return GormConvoRepo{db: db}
+	return nil
 }

@@ -329,8 +329,8 @@ func (rm *RoutesManager) handleBinaryMessage(userConn *UserConnection, msgBytes 
 
 func (rm *RoutesManager) processTextInput(userConn *UserConnection, text string) {
 	msg := conversation.Message{
-		Id:        uuid.New().String(),
-		UserId:    userConn.UserID.String(),
+		Id:        uuid.New(),
+		UserId:    userConn.UserID,
 		Text:      text,
 		Timestamp: time.Now(),
 		MsgRole:   assistant.USER,
@@ -517,8 +517,8 @@ func (rm *RoutesManager) handleTextWebSocket(c *gin.Context) {
 
 			// Process as conversation message
 			msg := conversation.Message{
-				Id:        uuid.New().String(),
-				UserId:    userID.String(),
+				Id:        uuid.New(),
+				UserId:    userID,
 				Text:      text,
 				Timestamp: time.Now(),
 				MsgRole:   assistant.USER,
@@ -597,8 +597,8 @@ func (rm *RoutesManager) handleVSSInterrupt(userConn *UserConnection, event vss.
 
 		// Create conversation message from transcription
 		msg := conversation.Message{
-			Id:        uuid.New().String(),
-			UserId:    userConn.UserID.String(),
+			Id:        uuid.New(),
+			UserId:    userConn.UserID,
 			Text:      interruptData.Transcription,
 			Timestamp: interruptData.StartTime,
 			MsgRole:   assistant.USER,

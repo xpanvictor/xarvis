@@ -1,30 +1,72 @@
 package conversation
 
 import (
+	"context"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/xpanvictor/xarvis/pkg/assistant"
 	"github.com/xpanvictor/xarvis/pkg/assistant/adapters"
+	"github.com/xpanvictor/xarvis/pkg/utils"
 )
 
+// short term info
 type Message struct {
-	Id        string         `json:"id"`
-	UserId    string         `json:"user_id"`
-	Text      string         `json:"text"`
-	Tags      []string       `json:"tags"`
-	Timestamp time.Time      `json:"timestamp"`
-	MsgRole   assistant.Role `json:"msg_role"`
+	Id             uuid.UUID      `json:"id"`
+	UserId         uuid.UUID      `json:"user_id"`
+	ConversationID uuid.UUID      `json:"conversation_id"`
+	Text           string         `json:"text"`
+	Tags           []string       `json:"tags"`
+	Timestamp      time.Time      `json:"timestamp"`
+	MsgRole        assistant.Role `json:"msg_role"`
 }
 
-// type Conversation struct {
-// 	Id string `json:"id"`
-// }
+type MemoryType string
+
+const (
+	EPISODIC MemoryType = "episodic"
+	SEMANTIC MemoryType = "semantic"
+)
+
+type Memory struct {
+	ID             uuid.UUID  `json:"id" example:""`
+	ConversationID uuid.UUID  `json:"conversation_id"`
+	Type           MemoryType `json:"memory_type"`
+	SaliencyScore  uint8      `json:"saliency_score"` // Ever growing saliency score MRU
+	Content        string     `json:"string"`
+	// Embeddings
+	EmbeddingRef any       `json:"embedding_ref"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+type Conversation struct {
+	ID        uuid.UUID `json:"id"`
+	OwnerID   uuid.UUID `json:"owner_id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Summary   string    `json:"summary"`
+	// Relationships
+	Messages []Message `json:"messages"`
+	Memories []Memory  `json:"memories"`
+}
+
+type MemorySearchRequest struct {
+	WithinPeriod  *utils.Range[time.Time]
+	SaliencyRange *utils.Range[uint8]
+}
 
 // Single conversation per user
 type ConversationRepository interface {
-	CreateMessage(userId string, msg Message) (Message, error)
-	FetchUserMessages(userId string) ([]Message, error)
-	FetchMessage(msgId string) (Message, error)
+	// Conversation
+	RetrieveUserConversation(userID uuid.UUID) (*Conversation, error) // creates if doesn't exist
+	// Messages
+	CreateMessage(ctx context.Context, userId uuid.UUID, msg Message) (*Message, error)
+	FetchUserMessages(ctx context.Context, userId uuid.UUID, start, end int64) ([]Message, error)
+	FetchMessage(ctx context.Context, msgId uuid.UUID) (*Message, error)
+	// Memories
+	FindMemories(conversationID uuid.UUID, msr MemorySearchRequest) ([]Memory, error)
+	CreateMemory(ctx context.Context, conversationID uuid.UUID, m Memory) (*Memory, error)
 }
 
 // Legacy conversion method - will be removed when assistant types are removed
@@ -37,9 +79,9 @@ func (m *Message) ToAssistantMessage() assistant.AssistantMessage {
 }
 
 // Legacy conversion method - will be removed when assistant types are removed
-func AssistantMsgToMessage(am *assistant.AssistantMessage, userId string) Message {
+func AssistantMsgToMessage(am *assistant.AssistantMessage, userId uuid.UUID) Message {
 	return Message{
-		Id:        "todo",
+		Id:        uuid.New(),
 		UserId:    userId,
 		Text:      am.Content,
 		MsgRole:   am.MsgRole,
@@ -72,7 +114,7 @@ func (m *Message) ToContractMessage() adapters.ContractMessage {
 }
 
 // Convert contract message to conversation message
-func ContractMsgToMessage(cm *adapters.ContractMessage, userId string, messageId string) Message {
+func ContractMsgToMessage(cm *adapters.ContractMessage, userId uuid.UUID, messageId uuid.UUID) Message {
 	// Convert adapters.MsgRole to assistant.Role
 	var assistantRole assistant.Role
 	switch cm.Role {

@@ -187,8 +187,8 @@ func (b *Brain) ProcessMessageWithToolHandling(ctx context.Context, session Brai
 		// Set final response
 		if messageContent != "" {
 			finalResponse = conversation.Message{
-				Id:        uuid.New().String(),
-				UserId:    session.UserID.String(),
+				Id:        uuid.New(),
+				UserId:    session.UserID,
 				Text:      messageContent,
 				Timestamp: time.Now(),
 				MsgRole:   assistant.ASSISTANT,
@@ -199,8 +199,8 @@ func (b *Brain) ProcessMessageWithToolHandling(ctx context.Context, session Brai
 
 	if finalResponse.Text == "" {
 		return conversation.Message{
-			Id:        uuid.New().String(),
-			UserId:    session.UserID.String(),
+			Id:        uuid.New(),
+			UserId:    session.UserID,
 			Text:      "No response generated",
 			Timestamp: time.Now(),
 			MsgRole:   assistant.ASSISTANT,
@@ -287,7 +287,7 @@ func (b *Brain) Decide(ctx context.Context, msg conversation.Message) (conversat
 	}
 
 	return conversation.Message{
-		Id:        uuid.New().String(),
+		Id:        uuid.New(),
 		UserId:    msg.UserId,
 		Text:      finalContent,
 		Timestamp: time.Now(),
@@ -314,8 +314,9 @@ func (b *Brain) ExecuteToolCallsParallel(
 
 			if err != nil {
 				toolResponse = conversation.Message{
-					Id:        uuid.New().String(),
-					UserId:    "", // Will be set by caller
+					Id: uuid.New(),
+					// todo: fix this
+					UserId:    uuid.New(), // Will be set by caller
 					Text:      fmt.Sprintf("Tool execution failed: %v", err),
 					Timestamp: time.Now(),
 					MsgRole:   assistant.TOOL,
@@ -336,8 +337,9 @@ func (b *Brain) ExecuteToolCallsParallel(
 				}
 
 				toolResponse = conversation.Message{
-					Id:        uuid.New().String(),
-					UserId:    "", // Will be set by caller
+					Id: uuid.New(),
+					// todo: fix this
+					UserId:    uuid.New(), // Will be set by caller
 					Text:      resultStr,
 					Timestamp: time.Now(),
 					MsgRole:   assistant.TOOL,
