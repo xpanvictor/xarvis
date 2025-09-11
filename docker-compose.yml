@@ -14,7 +14,8 @@ x-health-dev: &health-dev
 
 networks:
   edge:
-    name: xarvis_edge
+    external: true
+    name: edge
   backend:
     name: xarvis_backend
 
@@ -38,7 +39,7 @@ services:
       - "--providers.docker.network=xarvis_backend"
       - "--entrypoints.web.address=:80"
     ports:
-      - "80:80"
+      - "8082:80"
       - "8081:8080" # dashboard
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -48,6 +49,9 @@ services:
       <<: *health
     labels:
       - "traefik.enable=true"
+      # Caddy labels - expose Traefik to handle all xarvis routing
+      - "caddy=xarvis.xpan9.tech"
+      - "caddy.reverse_proxy={{upstreams 8082}}"
 
   # ───────────────────────── Xarvis Core (Go) ─────────────────────────
   xarvis-core:
@@ -68,12 +72,13 @@ services:
     command: [ "air", "-c", ".air.toml" ]
     depends_on:
       - mosquitto
-    networks: [ backend ]
+    networks: [ backend, edge ]
     ports: [ "8088:8088" ]
     healthcheck:
       test: [ "CMD", "wget", "-qO-", "http://localhost:8088/health" ]
       <<: *health
     labels:
+      # Traefik labels (keep for local routing)
       - "traefik.enable=true"
       - "traefik.http.routers.xarvis.rule=PathPrefix(`/v1/app`)"
       - "traefik.http.routers.xarvis.entrypoints=web"
@@ -263,7 +268,7 @@ services:
       # Live-reload: bind mount source for development
       - ./services/client:/app
       - /app/node_modules
-    networks: [ backend ]
+    networks: [ backend, edge ]
     ports: [ "5173:5173" ]
     depends_on:
       - xarvis-core
@@ -285,7 +290,7 @@ services:
       dockerfile: Dockerfile
       target: production
     restart: unless-stopped
-    networks: [ backend ]
+    networks: [ backend, edge ]
     ports: [ "3000:80" ]
     depends_on:
       - xarvis-core
