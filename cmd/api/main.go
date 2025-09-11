@@ -16,7 +16,28 @@ import (
 	"github.com/xpanvictor/xarvis/internal/database"
 	"github.com/xpanvictor/xarvis/internal/server"
 	"github.com/xpanvictor/xarvis/pkg/Logger"
+
+	_ "github.com/xpanvictor/xarvis/docs" // Import generated docs
 )
+
+// @title           Xarvis API
+// @version         1.0
+// @description     Xarvis AI Assistant API with user management and WebSocket communication
+// @termsOfService  http://swagger.io/terms/
+
+// @contact.name   API Support
+// @contact.email  xpanvictor@gmail.com
+
+// @license.name  Apache 2.0
+// @license.url   http://www.apache.org/licenses/LICENSE-2.0.html
+
+// @host      localhost:8088
+// @BasePath  /api/v1
+
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Type "Bearer" followed by a space and JWT token.
 
 // This is the main entry point for the API server.
 // Loads in all system components

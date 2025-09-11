@@ -12,11 +12,15 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 	"github.com/xpanvictor/xarvis/internal/config"
 	"github.com/xpanvictor/xarvis/internal/domains/conversation"
 	"github.com/xpanvictor/xarvis/internal/domains/conversation/brain"
 	"github.com/xpanvictor/xarvis/internal/domains/sys_manager/pipeline"
 	vss "github.com/xpanvictor/xarvis/internal/domains/sys_manager/voice_stream_system"
+	"github.com/xpanvictor/xarvis/internal/domains/user"
+	"github.com/xpanvictor/xarvis/internal/handlers"
 	"github.com/xpanvictor/xarvis/pkg/Logger"
 	"github.com/xpanvictor/xarvis/pkg/assistant"
 	"github.com/xpanvictor/xarvis/pkg/assistant/adapters"
@@ -99,6 +103,8 @@ type Dependencies struct {
 	BrainConfig    config.BrainConfig
 	Logger         *Logger.Logger
 	Configs        *config.Settings
+	// User management dependencies
+	UserService user.UserService
 }
 
 // UserBrainSystem tracks brain systems per user/session
@@ -123,6 +129,7 @@ func NewServerDependencies(
 	brainConfig config.BrainConfig,
 	logger *Logger.Logger,
 	config *config.Settings,
+	userService user.UserService,
 ) Dependencies {
 	return Dependencies{
 		conversationRepository: conversationRepository,
@@ -131,6 +138,7 @@ func NewServerDependencies(
 		BrainConfig:            brainConfig,
 		Configs:                config,
 		Logger:                 logger,
+		UserService:            userService,
 	}
 }
 
@@ -146,23 +154,43 @@ var upgrader = websocket.Upgrader{
 }
 
 func InitializeRoutes(cfg *config.Settings, r *gin.Engine, dep Dependencies) {
+	// Add middleware
+	r.Use(handlers.CORSMiddleware())
+	r.Use(handlers.RequestLoggerMiddleware(dep.Logger))
+	r.Use(handlers.ErrorHandlerMiddleware(dep.Logger))
+
+	// Health endpoints
 	r.GET("/", func(ctx *gin.Context) { ctx.JSON(200, gin.H{"message": "Server healthy"}) })
 	r.GET("/health", func(ctx *gin.Context) { ctx.JSON(200, gin.H{"status": "ok"}) })
+
+	// Swagger documentation endpoint
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
+	// API version group
+	v1 := r.Group("/api/v1")
+
+	// User management routes
+	userHandler := handlers.NewUserHandler(dep.UserService, dep.Logger)
+	userHandler.RegisterUserRoutes(v1)
 
 	// Create routes manager with new brain system architecture
 	rm := NewRoutesManager(dep)
 
-	// New WebSocket endpoint with audio/text support
-	r.GET("/ws", rm.handleWebSocket)
+	// WebSocket endpoints
+	ws := r.Group("/ws")
+	{
+		// Main WebSocket endpoint with audio/text support
+		ws.GET("/", rm.handleWebSocket)
 
-	// Audio-specific endpoint (for dedicated audio streaming)
-	r.GET("/ws/audio", rm.handleAudioWebSocket)
+		// Audio-specific endpoint (for dedicated audio streaming)
+		ws.GET("/audio", rm.handleAudioWebSocket)
 
-	// Text-only endpoint (for text-only clients)
-	r.GET("/ws/text", rm.handleTextWebSocket)
+		// Text-only endpoint (for text-only clients)
+		ws.GET("/text", rm.handleTextWebSocket)
 
-	// Keep legacy demo endpoint temporarily for comparison
-	r.GET("/ws-legacy", rm.handleLegacyWebSocket)
+		// Keep legacy demo endpoint temporarily for comparison
+		ws.GET("/legacy", rm.handleLegacyWebSocket)
+	}
 }
 
 func (rm *RoutesManager) handleWebSocket(c *gin.Context) {

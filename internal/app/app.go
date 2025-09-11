@@ -1,8 +1,11 @@
 package app
 
 import (
+	"time"
+
 	"github.com/xpanvictor/xarvis/internal/config"
 	"github.com/xpanvictor/xarvis/internal/domains/conversation"
+	"github.com/xpanvictor/xarvis/internal/domains/user"
 	"github.com/xpanvictor/xarvis/internal/repository"
 	"github.com/xpanvictor/xarvis/internal/server"
 	"github.com/xpanvictor/xarvis/pkg/Logger"
@@ -20,6 +23,8 @@ type App struct {
 	DeviceRegistry   registry.DeviceRegistry
 	LLMRouter        *router.Mux
 	ConversationRepo conversation.ConversationRepository
+	UserRepo         user.UserRepository
+	UserService      user.UserService
 	ServerDeps       server.Dependencies
 }
 
@@ -46,12 +51,30 @@ func (a *App) setupDependencies() error {
 	// 2. Set up conversation repository
 	a.ConversationRepo = repository.NewGormConversationRepo(a.DB)
 
-	// 3. Set up LLM providers and router
+	// 3. Set up user repository and service
+	a.UserRepo = repository.NewGormUserRepo(a.DB)
+
+	// JWT settings from config
+	jwtSecret := a.Config.Auth.JWTSecret
+	if jwtSecret == "" {
+		jwtSecret = "default-secret-key-change-in-production"
+		a.Logger.Warn("JWT secret not configured, using default (not secure for production)")
+	}
+
+	tokenTTLHours := a.Config.Auth.TokenTTLHours
+	if tokenTTLHours == 0 {
+		tokenTTLHours = 24 // default 24 hours
+	}
+	tokenTTL := time.Duration(tokenTTLHours) * time.Hour
+
+	a.UserService = user.NewUserService(a.UserRepo, a.Logger, jwtSecret, tokenTTL)
+
+	// 4. Set up LLM providers and router
 	if err := a.setupLLMRouter(); err != nil {
 		return err
 	}
 
-	// 4. Create server dependencies
+	// 5. Create server dependencies
 	a.ServerDeps = server.NewServerDependencies(
 		a.ConversationRepo,
 		a.DeviceRegistry,
@@ -59,6 +82,7 @@ func (a *App) setupDependencies() error {
 		a.Config.BrainConfig,
 		a.Logger,
 		a.Config,
+		a.UserService,
 	)
 
 	return nil

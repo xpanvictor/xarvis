@@ -67,6 +67,11 @@ type VoiceConfig struct {
 	TTSURL string `mapstructure:"tts_url"`
 }
 
+type AuthConfig struct {
+	JWTSecret     string `mapstructure:"jwt_secret"`
+	TokenTTLHours int    `mapstructure:"token_ttl_hours"`
+}
+
 type Settings struct {
 	DB            DBConfig         `mapstructure:"database"`
 	AssistantKeys AssistantKeysObj `mapstructure:"assistantKeys"`
@@ -75,6 +80,7 @@ type Settings struct {
 	BrainConfig   BrainConfig
 	SysModels     SysModelsConfig `mapstructure:"sys_models"`
 	Voice         VoiceConfig     `mapstructure:"voice"`
+	Auth          AuthConfig      `mapstructure:"auth"`
 }
 
 func Load() (*Settings, error) {

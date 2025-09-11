@@ -14,9 +14,10 @@ help:
 	@echo "  make ai          - Add local AI services (Ollama, Embeddings-TEI)"
 	@echo "  make qdrant      - Add Qdrant vector backend"
 	@echo "  make tidb        - Add local TiDB for dev (Serverless preferred in prod)"
+	@echo "  make docs        - Generate Swagger API documentation"
 	@echo "  make clean       - Stop & remove all containers, networks, volumes"
 
-.PHONY: up down restart logs proxy voice ai qdrant tidb clean ui_prod
+.PHONY: up down restart logs proxy voice ai qdrant tidb docs clean ui_prod
 
 up:
 	$(DOCKER_COMPOSE) --profile proxy --profile client up -d --build mosquitto xarvis-core xarvis-client
@@ -44,6 +45,12 @@ qdrant:
 
 tidb:
 	$(DOCKER_COMPOSE) --profile tidb-local up -d tidb-local
+
+docs:
+	@echo "Generating Swagger API documentation..."
+	@swag init -g cmd/api/main.go -o docs --parseInternal
+	@echo "✅ Swagger documentation generated!"
+	@echo "📖 API docs available at: http://localhost:8088/swagger/index.html"
 
 clean:
 	$(DOCKER_COMPOSE) down -v --remove-orphans

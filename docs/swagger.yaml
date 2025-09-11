@@ -1,0 +1,502 @@
+basePath: /api/v1
+definitions:
+  handlers.DeleteAccountResponse:
+    properties:
+      message:
+        example: Account deleted successfully
+        type: string
+    type: object
+  handlers.ErrorResponse:
+    properties:
+      details:
+        example: Validation error details
+        type: string
+      error:
+        example: Something went wrong
+        type: string
+    type: object
+  handlers.ListUsersResponse:
+    properties:
+      pagination:
+        $ref: '#/definitions/handlers.PaginationInfo'
+      users:
+        items:
+          $ref: '#/definitions/user.UserResponse'
+        type: array
+    type: object
+  handlers.LoginResponse:
+    properties:
+      message:
+        example: Login successful
+        type: string
+      tokens:
+        $ref: '#/definitions/user.AuthTokens'
+      user:
+        $ref: '#/definitions/user.UserResponse'
+    type: object
+  handlers.PaginationInfo:
+    properties:
+      limit:
+        example: 20
+        type: integer
+      offset:
+        example: 0
+        type: integer
+      total:
+        example: 150
+        type: integer
+    type: object
+  handlers.ProfileResponse:
+    properties:
+      user:
+        $ref: '#/definitions/user.UserResponse'
+    type: object
+  handlers.RefreshTokenRequest:
+    properties:
+      refreshToken:
+        example: jwt-refresh-token-here
+        type: string
+    required:
+    - refreshToken
+    type: object
+  handlers.RefreshTokenResponse:
+    properties:
+      message:
+        example: Token refreshed successfully
+        type: string
+      tokens:
+        $ref: '#/definitions/user.AuthTokens'
+    type: object
+  handlers.RegisterResponse:
+    properties:
+      message:
+        example: User registered successfully
+        type: string
+      user:
+        $ref: '#/definitions/user.UserResponse'
+    type: object
+  handlers.UpdateProfileResponse:
+    properties:
+      message:
+        example: Profile updated successfully
+        type: string
+      user:
+        $ref: '#/definitions/user.UserResponse'
+    type: object
+  handlers.UserByIDResponse:
+    properties:
+      user:
+        $ref: '#/definitions/user.UserResponse'
+    type: object
+  user.AuthTokens:
+    description: JWT authentication tokens
+    properties:
+      accessToken:
+        example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        type: string
+      expiresAt:
+        example: "2023-01-02T12:00:00Z"
+        type: string
+      refreshToken:
+        example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        type: string
+    type: object
+  user.CreateUserRequest:
+    description: Request body for user registration
+    properties:
+      displayName:
+        example: John Doe
+        maxLength: 100
+        minLength: 2
+        type: string
+      email:
+        example: john@example.com
+        type: string
+      password:
+        example: securePassword123
+        minLength: 8
+        type: string
+      settings:
+        type: object
+      timezone:
+        example: America/New_York
+        type: string
+    required:
+    - displayName
+    - email
+    - password
+    type: object
+  user.LoginRequest:
+    description: Request body for user login
+    properties:
+      email:
+        example: john@example.com
+        type: string
+      password:
+        example: securePassword123
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  user.OffTimeRange:
+    description: Time range when user is not available
+    properties:
+      end:
+        example: "2023-12-25T17:00:00Z"
+        type: string
+      label:
+        example: Christmas Day
+        type: string
+      start:
+        example: "2023-12-25T09:00:00Z"
+        type: string
+    type: object
+  user.UpdateUserRequest:
+    description: Request body for updating user profile
+    properties:
+      displayName:
+        example: John Smith
+        maxLength: 100
+        minLength: 2
+        type: string
+      offTimes:
+        items:
+          $ref: '#/definitions/user.OffTimeRange'
+        type: array
+      settings:
+        type: object
+      timezone:
+        example: Europe/London
+        type: string
+    type: object
+  user.UserResponse:
+    description: User information returned in API responses (no sensitive data)
+    properties:
+      createdAt:
+        example: "2023-01-01T12:00:00Z"
+        type: string
+      displayName:
+        example: John Doe
+        type: string
+      email:
+        example: john@example.com
+        type: string
+      id:
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+      offTimes:
+        items:
+          $ref: '#/definitions/user.OffTimeRange'
+        type: array
+      settings:
+        type: object
+      timezone:
+        example: America/New_York
+        type: string
+      updatedAt:
+        example: "2023-01-01T12:00:00Z"
+        type: string
+    type: object
+host: localhost:8088
+info:
+  contact:
+    email: xpanvictor@gmail.com
+    name: API Support
+  description: Xarvis AI Assistant API with user management and WebSocket communication
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: Xarvis API
+  version: "1.0"
+paths:
+  /admin/users:
+    get:
+      consumes:
+      - application/json
+      description: List all users with pagination (admin only)
+      parameters:
+      - default: 0
+        description: Number of users to skip
+        in: query
+        name: offset
+        type: integer
+      - default: 20
+        description: Number of users to return
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of users with pagination
+          schema:
+            $ref: '#/definitions/handlers.ListUsersResponse'
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "403":
+          description: Admin access required
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List users (Admin)
+      tags:
+      - Admin
+  /admin/users/{id}:
+    get:
+      consumes:
+      - application/json
+      description: Get a specific user by ID (admin only)
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: User data
+          schema:
+            $ref: '#/definitions/handlers.UserByIDResponse'
+        "400":
+          description: User ID is required
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "403":
+          description: Admin access required
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get user by ID (Admin)
+      tags:
+      - Admin
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticate user with email and password
+      parameters:
+      - description: User login credentials
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/user.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Login successful with user data and tokens
+          schema:
+            $ref: '#/definitions/handlers.LoginResponse'
+        "400":
+          description: Invalid request data
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "401":
+          description: Invalid credentials
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: User login
+      tags:
+      - Authentication
+  /auth/refresh:
+    post:
+      consumes:
+      - application/json
+      description: Refresh an expired access token using refresh token
+      parameters:
+      - description: Refresh token data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.RefreshTokenRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Token refreshed successfully
+          schema:
+            $ref: '#/definitions/handlers.RefreshTokenResponse'
+        "400":
+          description: Invalid request data
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "401":
+          description: Invalid refresh token
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Refresh access token
+      tags:
+      - Authentication
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Register a new user account with email and password
+      parameters:
+      - description: User registration data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/user.CreateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: User registered successfully
+          schema:
+            $ref: '#/definitions/handlers.RegisterResponse'
+        "400":
+          description: Invalid request data
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "409":
+          description: Email already exists
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Register a new user
+      tags:
+      - Authentication
+  /user/account:
+    delete:
+      consumes:
+      - application/json
+      description: Delete the current authenticated user's account
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Account deleted successfully
+          schema:
+            $ref: '#/definitions/handlers.DeleteAccountResponse'
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete user account
+      tags:
+      - User Profile
+  /user/profile:
+    get:
+      consumes:
+      - application/json
+      description: Get the current authenticated user's profile
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: User profile data
+          schema:
+            $ref: '#/definitions/handlers.ProfileResponse'
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get user profile
+      tags:
+      - User Profile
+    put:
+      consumes:
+      - application/json
+      description: Update the current authenticated user's profile
+      parameters:
+      - description: Profile update data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/user.UpdateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Profile updated successfully
+          schema:
+            $ref: '#/definitions/handlers.UpdateProfileResponse'
+        "400":
+          description: Invalid request data
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update user profile
+      tags:
+      - User Profile
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer" followed by a space and JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
