@@ -7,6 +7,7 @@ import (
 	"github.com/xpanvictor/xarvis/internal/domains/conversation"
 	"github.com/xpanvictor/xarvis/internal/domains/user"
 	"github.com/xpanvictor/xarvis/internal/repository"
+	userRepo "github.com/xpanvictor/xarvis/internal/repository/user"
 	"github.com/xpanvictor/xarvis/internal/server"
 	"github.com/xpanvictor/xarvis/pkg/Logger"
 	"github.com/xpanvictor/xarvis/pkg/assistant/router"
@@ -52,7 +53,7 @@ func (a *App) setupDependencies() error {
 	a.ConversationRepo = repository.NewGormConversationRepo(a.DB)
 
 	// 3. Set up user repository and service
-	a.UserRepo = repository.NewGormUserRepo(a.DB)
+	a.UserRepo = userRepo.NewGormUserRepo(a.DB)
 
 	// JWT settings from config
 	jwtSecret := a.Config.Auth.JWTSecret

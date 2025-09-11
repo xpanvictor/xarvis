@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
 	"github.com/xpanvictor/xarvis/pkg/Logger"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -87,16 +86,14 @@ func (s *userService) Register(ctx context.Context, req CreateUserRequest) (*Use
 		timezone = "UTC"
 	}
 
-	// Create user
-	user := &User{
-		ID:          uuid.New().String(),
-		DisplayName: req.DisplayName,
-		Email:       req.Email,
-		Password:    string(hashedPassword),
-		Timezone:    timezone,
-		Settings:    req.Settings,
-		OffTimes:    []OffTimeRange{},
-	}
+	// Create request with default timezone
+	userReq := req
+	userReq.Timezone = timezone
+
+	// todo: create user single conversation likewise
+
+	// Create user using domain constructor
+	user := NewUser(userReq, string(hashedPassword))
 
 	if err := s.repository.Create(user); err != nil {
 		s.logger.Errorf("error creating user: %v", err)

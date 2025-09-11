@@ -16,6 +16,10 @@ type Message struct {
 	MsgRole   assistant.Role `json:"msg_role"`
 }
 
+// type Conversation struct {
+// 	Id string `json:"id"`
+// }
+
 // Single conversation per user
 type ConversationRepository interface {
 	CreateMessage(userId string, msg Message) (Message, error)
