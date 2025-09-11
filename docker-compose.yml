@@ -85,7 +85,7 @@ services:
       test: [ "CMD", "wget", "-qO-", "http://localhost:8088/health" ]
       <<: *health
     labels:
-      # Traefik labels for HTTPS
+      # Traefik labels for HTTPS API
       - "traefik.enable=true"
       - "traefik.http.routers.xarvis.rule=Host(`xarvis.xpan9.tech`) && PathPrefix(`/v1/app`)"
       - "traefik.http.routers.xarvis.entrypoints=websecure"
@@ -94,6 +94,12 @@ services:
       - "traefik.http.services.xarvis.loadbalancer.server.port=8088"
       - "traefik.http.middlewares.xarvis-strip.stripprefix.prefixes=/v1/app"
       - "traefik.http.routers.xarvis.middlewares=xarvis-strip@docker"
+      # WebSocket router for /ws endpoint
+      - "traefik.http.routers.xarvis-ws.rule=Host(`xarvis.xpan9.tech`) && PathPrefix(`/ws`)"
+      - "traefik.http.routers.xarvis-ws.entrypoints=websecure"
+      - "traefik.http.routers.xarvis-ws.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.xarvis-ws.priority=110"
+      - "traefik.http.services.xarvis-ws.loadbalancer.server.port=8088"
 
   # ───────────────────────── Messaging (ESP audio/control) ─────────────────────────
   mosquitto:
