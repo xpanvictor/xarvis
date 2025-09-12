@@ -349,6 +349,63 @@ const docTemplate = `{
                 }
             }
         },
+        "/conversation/memory": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Creates a new memory entry for the authenticated user's conversation",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Conversation"
+                ],
+                "summary": "Create a new memory",
+                "parameters": [
+                    {
+                        "description": "Memory creation data",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/types.CreateMemory"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created memory",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.MemoryResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request data",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "User not authenticated",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/conversation/message": {
             "post": {
                 "security": [
@@ -635,6 +692,14 @@ const docTemplate = `{
                 }
             }
         },
+        "handlers.MemoryResponse": {
+            "type": "object",
+            "properties": {
+                "memory": {
+                    "$ref": "#/definitions/types.Memory"
+                }
+            }
+        },
         "handlers.MessageResponse": {
             "type": "object",
             "properties": {
@@ -754,6 +819,32 @@ const docTemplate = `{
                 },
                 "updated_at": {
                     "type": "string"
+                }
+            }
+        },
+        "types.CreateMemory": {
+            "description": "Memory creation body",
+            "type": "object",
+            "required": [
+                "content",
+                "type"
+            ],
+            "properties": {
+                "content": {
+                    "type": "string",
+                    "example": "Remember to call John tomorrow at 3 PM"
+                },
+                "type": {
+                    "enum": [
+                        "episodic",
+                        "semantic"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/types.MemoryType"
+                        }
+                    ],
+                    "example": "episodic"
                 }
             }
         },

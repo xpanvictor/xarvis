@@ -38,7 +38,7 @@ voice:
 	$(DOCKER_COMPOSE) --profile voice up -d sys-models stt-whisper tts-piper
 
 ai:
-	$(DOCKER_COMPOSE) --profile ai-local up -d ollama embeddings-tei
+	$(DOCKER_COMPOSE) --profile models up -d embeddings-tei
 
 qdrant:
 	$(DOCKER_COMPOSE) --profile vector-qdrant up -d qdrant

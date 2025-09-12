@@ -24,6 +24,7 @@ type ConversationService interface {
 	RetrieveConversation(ctx context.Context, userID uuid.UUID) (*types.Conversation, error)
 	ProcessMsg(ctx context.Context, userID uuid.UUID, msg types.Message, sysMsgs []types.Message) (*types.Message, error)
 	ProcessMsgAsStream(ctx context.Context, userID uuid.UUID, msg types.Message, sysMsgs []types.Message, outCh chan<- types.Message) error
+	CreateMemory(ctx context.Context, userID uuid.UUID, memory types.Memory) (*types.Memory, error)
 }
 
 type conversationService struct {
@@ -82,6 +83,26 @@ func (c *conversationService) RetrieveConversation(ctx context.Context, userID u
 		Msr: &types.MemorySearchRequest{},
 	}
 	return c.repository.RetrieveUserConversation(ctx, userID, &csr)
+}
+
+// CreateMemory implements ConversationService.
+func (c *conversationService) CreateMemory(ctx context.Context, userID uuid.UUID, memory types.Memory) (*types.Memory, error) {
+	// First get or create the user's conversation
+	conversation, err := c.RetrieveConversation(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("couldn't retrieve conversation: %v", err)
+	}
+
+	// Set the conversation ID for the memory
+	memory.ConversationID = conversation.ID
+
+	// Create the memory
+	createdMemory, err := c.repository.CreateMemory(ctx, conversation.ID, memory)
+	if err != nil {
+		return nil, fmt.Errorf("couldn't create memory: %v", err)
+	}
+
+	return createdMemory, nil
 }
 
 func New(cfg config.Settings, gm *router.Mux,

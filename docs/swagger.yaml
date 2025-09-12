@@ -51,6 +51,11 @@ definitions:
       user:
         $ref: '#/definitions/user.UserResponse'
     type: object
+  handlers.MemoryResponse:
+    properties:
+      memory:
+        $ref: '#/definitions/types.Memory'
+    type: object
   handlers.MessageResponse:
     properties:
       message:
@@ -131,6 +136,23 @@ definitions:
         type: string
       updated_at:
         type: string
+    type: object
+  types.CreateMemory:
+    description: Memory creation body
+    properties:
+      content:
+        example: Remember to call John tomorrow at 3 PM
+        type: string
+      type:
+        allOf:
+        - $ref: '#/definitions/types.MemoryType'
+        enum:
+        - episodic
+        - semantic
+        example: episodic
+    required:
+    - content
+    - type
     type: object
   types.CreateMessage:
     description: Msg creation body
@@ -526,6 +548,42 @@ paths:
       security:
       - BearerAuth: []
       summary: Retrieve user conversation
+      tags:
+      - Conversation
+  /conversation/memory:
+    post:
+      consumes:
+      - application/json
+      description: Creates a new memory entry for the authenticated user's conversation
+      parameters:
+      - description: Memory creation data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/types.CreateMemory'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created memory
+          schema:
+            $ref: '#/definitions/handlers.MemoryResponse'
+        "400":
+          description: Invalid request data
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a new memory
       tags:
       - Conversation
   /conversation/message:

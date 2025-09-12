@@ -8,17 +8,17 @@ import (
 
 	"github.com/go-redis/redis"
 	"github.com/google/uuid"
-	"github.com/xpanvictor/xarvis/internal/database/dbtypes"
+	"github.com/xpanvictor/xarvis/internal/runtime/embedding"
 	"github.com/xpanvictor/xarvis/internal/types"
 	"github.com/xpanvictor/xarvis/pkg/utils"
 	"gorm.io/gorm"
 )
 
 type GormConversationrepo struct {
-	db        *gorm.DB
-	rc        *redis.Client
-	msgTTL    time.Duration
-	embedFunc func(ctx context.Context, text string) ([]float32, error) // from a provider
+	db       *gorm.DB
+	rc       *redis.Client
+	msgTTL   time.Duration
+	embedder embedding.Embedder // Use the embedder interface
 }
 
 func UserMsgListKey(userID uuid.UUID) string {
@@ -27,16 +27,62 @@ func UserMsgListKey(userID uuid.UUID) string {
 
 // CreateMemory implements types.ConversationRepository.
 func (g *GormConversationrepo) CreateMemory(ctx context.Context, conversationID uuid.UUID, m types.Memory) (*types.Memory, error) {
+	// Create the memory entity (without embeddings)
 	me := &MemoryEntity{}
-	embed, err := g.embedFunc(ctx, m.Content)
+	me.FromDomain(m)
+
+	// Start a transaction
+	tx := g.db.WithContext(ctx).Begin()
+	if tx.Error != nil {
+		return nil, tx.Error
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// Save the main memory entity
+	if err := tx.Create(&me).Error; err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
+	// Chunk the content
+	chunks := g.embedder.Chunk(m.Content)
+	if len(chunks) == 0 {
+		tx.Rollback()
+		return nil, fmt.Errorf("no chunks generated from content")
+	}
+
+	// Create embeddings for all chunks
+	embeddings, err := g.embedder.Embed(ctx, chunks)
 	if err != nil {
+		tx.Rollback()
+		return nil, fmt.Errorf("failed to create embeddings: %v", err)
+	}
+
+	if len(embeddings) != len(chunks) {
+		tx.Rollback()
+		return nil, fmt.Errorf("mismatch between chunks and embeddings")
+	}
+
+	// Create and save chunk entities
+	for i, chunk := range chunks {
+		chunkEntity := &MemoryChunkEntity{}
+		chunkEntity.FromChunk(me.ID, i, chunk, embeddings[i])
+
+		if err := tx.Create(&chunkEntity).Error; err != nil {
+			tx.Rollback()
+			return nil, fmt.Errorf("failed to save chunk %d: %v", i, err)
+		}
+	}
+
+	// Commit the transaction
+	if err := tx.Commit().Error; err != nil {
 		return nil, err
 	}
-	me.FromDomain(m, embed)
-	// store in db
-	if err := g.db.WithContext(ctx).Create(&me).Error; err != nil {
-		return nil, err
-	}
+
 	return me.ToDomain(), nil
 }
 
@@ -113,19 +159,23 @@ func (g *GormConversationrepo) FetchUserMessages(ctx context.Context, userId uui
 func (g *GormConversationrepo) FindMemories(ctx context.Context, conversationID uuid.UUID, msr types.MemorySearchRequest) ([]types.Memory, error) {
 	// first check for vector search
 	if msr.QueryStatement != nil {
-		queryVec, err := g.embedFunc(ctx, *msr.QueryStatement)
+		// Create embedding for the query
+		queryVec, err := g.embedder.EmbedSingle(ctx, *msr.QueryStatement)
 		if err != nil {
 			return nil, err
 		}
+
+		// Search through memory chunks, but return unique memories
 		sql := `
-            SELECT *, VEC_COSINE_DISTANCE(embedding_ref, ?) AS distance
-            FROM memory_entities
-            WHERE conversation_id = ?
+            SELECT DISTINCT m.*, VEC_COSINE_DISTANCE(c.embedding_ref, ?) AS distance
+            FROM memory_entities m
+            JOIN memory_chunk_entities c ON m.id = c.memory_id
+            WHERE m.conversation_id = ?
             ORDER BY distance
             LIMIT 10
         `
 		var entities []MemoryEntity
-		if err := g.db.Raw(sql, dbtypes.XVector(queryVec), conversationID).Scan(&entities).Error; err != nil {
+		if err := g.db.Raw(sql, queryVec, conversationID).Scan(&entities).Error; err != nil {
 			return nil, err
 		}
 		var dms []types.Memory
@@ -155,7 +205,6 @@ func (g *GormConversationrepo) FindMemories(ctx context.Context, conversationID 
 		dms = append(dms, *m.ToDomain())
 	}
 	return dms, nil
-
 }
 
 // RetrieveUserConversation implements types.ConversationRepository.
@@ -189,8 +238,8 @@ func (g *GormConversationrepo) RetrieveUserConversation(ctx context.Context, use
 	return &dconv, nil
 }
 
-func NewGormConvoRepo(db *gorm.DB, rc *redis.Client, msgTTL time.Duration) types.ConversationRepository {
+func NewGormConvoRepo(db *gorm.DB, rc *redis.Client, msgTTL time.Duration, embedder embedding.Embedder) types.ConversationRepository {
 	return &GormConversationrepo{
-		db: db, rc: rc, msgTTL: msgTTL,
+		db: db, rc: rc, msgTTL: msgTTL, embedder: embedder,
 	}
 }

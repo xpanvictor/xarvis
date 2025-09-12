@@ -80,6 +80,11 @@ type MessageResponse struct {
 	Message types.Message `json:"message"`
 }
 
+// MemoryResponse represents the response for creating a memory
+type MemoryResponse struct {
+	Memory types.Memory `json:"memory"`
+}
+
 // ConversationResponse represents the response for getting conversation
 type ConversationResponse struct {
 	Conversation types.Conversation `json:"conversation"`

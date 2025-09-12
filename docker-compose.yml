@@ -174,7 +174,7 @@ services:
 
   # ───────────────────────── Local LLMs & Embeddings (opt-in with --profile ai-local) ─────────────────────────
   ollama:
-    profiles: [ "ai-local" ]
+    profiles: [ "models", "ai-llm-local" ]
     image: ollama/ollama:latest
     restart: unless-stopped
     networks: [ backend ]
@@ -199,19 +199,22 @@ services:
       - "traefik.http.routers.ollama.middlewares=ollama-strip@docker"
 
   embeddings-tei:
-    profiles: [ "ai-local" ]
-    platform: linux/amd64 # uncomment on Apple Silicon if needed
-    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.5
+    profiles: [ "models" ]
+    platform: linux/amd64 # keep if you're on Apple Silicon, otherwise remove
+    image: ghcr.io/huggingface/text-embeddings-inference:1.8.2
     environment:
-      MODEL_ID: mixedbread-ai/mxbai-embed-large-v1
+      MODEL_ID: BAAI/bge-base-en-v1.5
       NUM_SHARD: "1"
     networks: [ backend ]
-    ports: [ "8082:80" ]
+    ports:
+      - "8082:80"
     volumes:
-      - tei_data:/data
+      - tei_data:/data # cache HuggingFace downloads here
     healthcheck:
       test: [ "CMD", "wget", "-qO-", "http://localhost:80/health" ]
-      <<: *health
+      interval: 10s
+      timeout: 5s
+      retries: 5
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.embed.rule=PathPrefix(`/v1/embed`)"

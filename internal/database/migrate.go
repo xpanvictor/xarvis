@@ -13,17 +13,18 @@ func MigrateDB(db *gorm.DB) {
 		&userRepo.UserEntity{},
 		&conversation.ConversationEntity{},
 		&conversation.MemoryEntity{},
+		&conversation.MemoryChunkEntity{},
 	)
 
 	// Create vector index with TiDB-specific syntax for columnar replica
 	if err := db.Exec(`
-	CREATE VECTOR INDEX idx_mem_embedding
-	ON memory_entities ((VEC_COSINE_DISTANCE(embedding_ref)))
+	CREATE VECTOR INDEX idx_mem_chunk_embedding
+	ON memory_chunk_entities ((VEC_COSINE_DISTANCE(embedding_ref)))
 	USING HNSW
 	ADD_COLUMNAR_REPLICA_ON_DEMAND;
 	`).Error; err != nil {
 		// Ignore "already exists" error since that's expected on subsequent runs
-		if err.Error() != "Error 1061 (42000): vector index 'idx_mem_embedding' with VEC_COSINE_DISTANCE already exist on column embedding_ref" {
+		if err.Error() != "Error 1061 (42000): vector index 'idx_mem_chunk_embedding' with VEC_COSINE_DISTANCE already exist on column embedding_ref" {
 			db.Logger.Error(context.TODO(), "Failed to create vector index: %v", err)
 		}
 	}

@@ -9,6 +9,7 @@ import (
 	"github.com/xpanvictor/xarvis/internal/domains/user"
 	convoRepo "github.com/xpanvictor/xarvis/internal/repository/conversation"
 	userRepo "github.com/xpanvictor/xarvis/internal/repository/user"
+	"github.com/xpanvictor/xarvis/internal/runtime/embedding"
 	"github.com/xpanvictor/xarvis/internal/server"
 	"github.com/xpanvictor/xarvis/pkg/Logger"
 	"github.com/xpanvictor/xarvis/pkg/assistant/router"
@@ -25,6 +26,7 @@ type App struct {
 	RC             *redis.Client
 	DeviceRegistry registry.DeviceRegistry
 	LLMRouter      *router.Mux
+	Embedder       embedding.Embedder
 	// repos
 	ConversationRepo conversation.ConversationRepository
 	UserRepo         user.UserRepository
@@ -51,12 +53,18 @@ func NewApp(cfg *config.Settings, logger *Logger.Logger, db *gorm.DB, rc *redis.
 func (a *App) setupDependencies() error {
 	// 1. Create shared device registry
 	a.DeviceRegistry = memoryregistry.New()
-	//  Set up LLM providers and router
+
+	// 2. Set up embedder
+	if err := a.setupEmbedder(); err != nil {
+		return err
+	}
+
+	//  3. Set up LLM providers and router
 	if err := a.setupLLMRouter(); err != nil {
 		return err
 	}
 
-	// 2. setup deps
+	// 4. setup deps
 	deps := server.NewServerDependencies(
 		a.ConversationRepo,
 		a.DeviceRegistry,
@@ -65,8 +73,8 @@ func (a *App) setupDependencies() error {
 		a.Logger,
 		a.Config,
 	)
-	// 3. Set up repositories
-	a.ConversationRepo = convoRepo.NewGormConvoRepo(a.DB, a.RC, time.Duration(a.Config.BrainConfig.MsgTTLMins*int64(time.Minute)))
+	// 5. Set up repositories
+	a.ConversationRepo = convoRepo.NewGormConvoRepo(a.DB, a.RC, time.Duration(a.Config.BrainConfig.MsgTTLMins*int64(time.Minute)), a.Embedder)
 	a.UserRepo = userRepo.NewGormUserRepo(a.DB)
 
 	// JWT settings from config
@@ -94,6 +102,19 @@ func (a *App) setupDependencies() error {
 
 	a.ServerDeps = deps
 
+	return nil
+}
+
+// setupEmbedder configures the embedder
+func (a *App) setupEmbedder() error {
+	// For now, hardcode TEI URL from docker-compose
+	// In production, this should come from config
+	teiURL := "http://embeddings-tei:80"
+
+	// Create TEI embedder
+	a.Embedder = embedding.NewTEIEmbedder(teiURL, a.Logger)
+
+	a.Logger.Info("TEI embedder configured successfully")
 	return nil
 }
 

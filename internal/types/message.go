@@ -28,6 +28,13 @@ type CreateMessage struct {
 	Timestamp time.Time `json:"timestamp" binding:"required" example:"2023-12-25T09:00:00Z"`
 }
 
+// CreateMemory data to create memory
+// @Description Memory creation body
+type CreateMemory struct {
+	Type    MemoryType `json:"type" binding:"required" example:"episodic" enums:"episodic,semantic"`
+	Content string     `json:"content" binding:"required" example:"Remember to call John tomorrow at 3 PM"`
+}
+
 func (cm *CreateMessage) ToMessage(userID uuid.UUID) Message {
 	return Message{
 		Id:     uuid.New(),
@@ -37,6 +44,17 @@ func (cm *CreateMessage) ToMessage(userID uuid.UUID) Message {
 		Tags:      []string{"user req"},
 		Timestamp: cm.Timestamp,
 		MsgRole:   assistant.Role(adapters.USER),
+	}
+}
+
+func (cm *CreateMemory) ToMemory() Memory {
+	return Memory{
+		ID:            uuid.New(),
+		Type:          cm.Type,
+		Content:       cm.Content,
+		SaliencyScore: 1, // default saliency score
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
 	}
 }
 

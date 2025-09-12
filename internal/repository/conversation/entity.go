@@ -13,20 +13,38 @@ import (
 
 type MemoryEntity struct {
 	ID             uuid.UUID `gorm:"primaryKey;type:char(36);not null"`
-	ConversationID uuid.UUID `gorm:"column:conversation_id;primaryKey;type:char(36);not null"`
+	ConversationID uuid.UUID `gorm:"column:conversation_id;type:char(36);not null"`
 
-	Type          string `gorm:"type:varchar(10)"`                        //should this be an enum
-	SaliencyScore uint8  `gorm:"column:saliency_score;type:varchar(255)"` // Ever growing saliency score MRU
-	Content       string `gorm:"type:varchar(255)"`
-	// Embeddings
-	EmbeddingRef dbtypes.XVector `gorm:"type:vector(768)"`
+	Type          string `gorm:"type:varchar(10)"`      // should this be an enum
+	SaliencyScore uint8  `gorm:"column:saliency_score"` // Ever growing saliency score MRU
+	Content       string `gorm:"type:text"`             // Full content, increased from varchar(255)
 
 	CreatedAt time.Time      `gorm:"autoCreateTime(3)"`
 	UpdatedAt time.Time      `gorm:"autoUpdateTime(3)"`
 	DeletedAt gorm.DeletedAt `gorm:"index"` // For soft delete
+
+	// Relationship to chunks
+	Chunks []MemoryChunkEntity `gorm:"foreignKey:MemoryID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 }
 
-func (me *MemoryEntity) FromDomain(m types.Memory, embeddings []float32) {
+// MemoryChunkEntity represents a chunk of memory content with its embedding
+type MemoryChunkEntity struct {
+	ID       uuid.UUID `gorm:"primaryKey;type:char(36);not null"`
+	MemoryID uuid.UUID `gorm:"column:memory_id;type:char(36);not null"`
+
+	ChunkIndex   int             `gorm:"column:chunk_index"` // Order of chunk within the memory
+	ChunkContent string          `gorm:"type:text"`          // The chunked content
+	EmbeddingRef dbtypes.XVector `gorm:"type:vector(768)"`   // Embedding for this chunk
+
+	CreatedAt time.Time      `gorm:"autoCreateTime(3)"`
+	UpdatedAt time.Time      `gorm:"autoUpdateTime(3)"`
+	DeletedAt gorm.DeletedAt `gorm:"index"` // For soft delete
+
+	// Back reference to memory
+	Memory MemoryEntity `gorm:"foreignKey:MemoryID;references:ID"`
+}
+
+func (me *MemoryEntity) FromDomain(m types.Memory) {
 	me.ID = m.ID
 	me.Content = m.Content
 	me.CreatedAt = m.CreatedAt
@@ -34,10 +52,7 @@ func (me *MemoryEntity) FromDomain(m types.Memory, embeddings []float32) {
 	me.Type = string(m.Type)
 	me.SaliencyScore = m.SaliencyScore
 	me.ConversationID = m.ConversationID
-
-	// embeddings
-	xembeddings := dbtypes.XVector(embeddings)
-	me.EmbeddingRef = xembeddings
+	// Chunks will be handled separately
 }
 
 func (me *MemoryEntity) ToDomain() *types.Memory {
@@ -47,10 +62,19 @@ func (me *MemoryEntity) ToDomain() *types.Memory {
 		Type:           types.MemoryType(me.Type),
 		SaliencyScore:  me.SaliencyScore,
 		Content:        me.Content,
-		// no need for embeddings
-		CreatedAt: me.CreatedAt,
-		UpdatedAt: me.UpdatedAt,
+		CreatedAt:      me.CreatedAt,
+		UpdatedAt:      me.UpdatedAt,
 	}
+}
+
+func (mce *MemoryChunkEntity) FromChunk(memoryID uuid.UUID, chunkIndex int, content string, embedding dbtypes.XVector) {
+	mce.ID = uuid.New()
+	mce.MemoryID = memoryID
+	mce.ChunkIndex = chunkIndex
+	mce.ChunkContent = content
+	mce.EmbeddingRef = embedding
+	mce.CreatedAt = time.Now()
+	mce.UpdatedAt = time.Now()
 }
 
 type ConversationEntity struct {

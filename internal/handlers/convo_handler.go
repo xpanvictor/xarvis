@@ -105,6 +105,47 @@ func (h *ConversationHandler) RetrieveConversation(c *gin.Context) {
 	})
 }
 
+// CreateMemory creates a new memory for the user
+// @Summary Create a new memory
+// @Description Creates a new memory entry for the authenticated user's conversation
+// @Tags Conversation
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body types.CreateMemory true "Memory creation data"
+// @Success 201 {object} MemoryResponse "Created memory"
+// @Failure 400 {object} ErrorResponse "Invalid request data"
+// @Failure 401 {object} ErrorResponse "User not authenticated"
+// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Router /conversation/memory [post]
+func (h *ConversationHandler) CreateMemory(c *gin.Context) {
+	UserInfo, ok := ExtractUserInfo(c)
+	if !ok {
+		return
+	}
+
+	var createMemory types.CreateMemory
+	if err := c.ShouldBindJSON(&createMemory); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error:   "Invalid request data",
+			Details: err.Error(),
+		})
+		return
+	}
+
+	memory := createMemory.ToMemory()
+	createdMemory, err := h.convoService.CreateMemory(c, UserInfo.UserID, memory)
+	if err != nil {
+		h.logger.Errorf("create memory error: %v", err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Internal server error"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, MemoryResponse{
+		Memory: *createdMemory,
+	})
+}
+
 // RegisterConversationRoutes registers all conversation-related routes
 func (h *ConversationHandler) RegisterConversationRoutes(r *gin.RouterGroup, userService user.UserService) {
 	// Protected routes (authentication required)
@@ -112,6 +153,7 @@ func (h *ConversationHandler) RegisterConversationRoutes(r *gin.RouterGroup, use
 	protected.Use(AuthMiddleware(userService, h.logger))
 	{
 		protected.POST("/message", h.ProcessMessage)
+		protected.POST("/memory", h.CreateMemory)
 		protected.GET("", h.RetrieveConversation)
 	}
 }
