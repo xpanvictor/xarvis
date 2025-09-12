@@ -4,7 +4,7 @@ import (
 	"sync"
 
 	"github.com/looplab/fsm"
-	"github.com/xpanvictor/xarvis/internal/domains/conversation/brain"
+	"github.com/xpanvictor/xarvis/internal/runtime/brain"
 )
 
 // Every user has a runtime in the system

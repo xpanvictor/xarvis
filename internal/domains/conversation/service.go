@@ -1,80 +1,86 @@
 package conversation
 
-// import (
-// 	"context"
-// 	"time"
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
 
-// 	"github.com/google/uuid"
-// 	"github.com/xpanvictor/xarvis/pkg/Logger"
-// 	"github.com/xpanvictor/xarvis/pkg/assistant"
-// )
+	"github.com/google/uuid"
+	"github.com/xpanvictor/xarvis/internal/config"
+	"github.com/xpanvictor/xarvis/internal/runtime/brain"
+	"github.com/xpanvictor/xarvis/internal/types"
+	"github.com/xpanvictor/xarvis/pkg/Logger"
+)
 
-// type ConversationManager interface {
-// 	ProcessMessage(ctx context.Context, userId uuid.UUID, msg Message) (*Message, error)
-// }
+var (
+	ErrProcMsg = errors.New("error processing msg")
+)
 
-// type conversation struct {
-// 	repository ConversationRepository
-// 	logger     *Logger.Logger
-// 	// TODO: Replace with contract-based adapter when assistant types are removed
-// 	// adapter    adapters.ContractAdapter
-// }
+type ConversationService interface {
+	RetrieveConversation(ctx context.Context, userID uuid.UUID) (*types.Conversation, error)
+	ProcessMsg(ctx context.Context, userID uuid.UUID, msg types.Message, sysMsgs []types.Message) (*types.Message, error)
+	ProcessMsgAsStream(ctx context.Context, userID uuid.UUID, msg types.Message, sysMsgs []types.Message, outCh chan<- types.Message) error
+}
 
-// // ProcessMessage implements Conversation.
-// func (c conversation) ProcessMessage(
-// 	ctx context.Context,
-// 	userId uuid.UUID,
-// 	msg Message,
-// ) (*Message, error) {
-// 	// store user msg
-// 	c.repository.CreateMessage(userId.String(), msg)
+type conversationService struct {
+	bs         brain.BrainSystem
+	repository ConversationRepository
+	logger     *Logger.Logger
+}
 
-// 	// TODO: Replace this with contract-based processing
-// 	// This is a temporary placeholder during migration
-// 	response := Message{
-// 		Id:        uuid.New(),
-// 		UserId:    userId,
-// 		Text:      "Service processing temporarily disabled during migration to contract types",
-// 		Timestamp: time.Now(),
-// 		MsgRole:   assistant.ASSISTANT,
-// 		Tags:      []string{"migration", "placeholder"},
-// 	}
+// ProcessMsg implements ConversationService.
+func (c *conversationService) ProcessMsg(ctx context.Context, userID uuid.UUID, msg types.Message, sysMsgs []types.Message) (*types.Message, error) {
+	// store user msg
+	nmsg, err := c.repository.CreateMessage(ctx, userID, msg)
+	if err != nil {
+		return nil, fmt.Errorf("couldn't save msg: %v", err)
+	}
+	// process msg in brain
+	msgs := make([]types.Message, 0)
+	msgs = append(msgs, sysMsgs...)
+	msgs = append(msgs, *nmsg)
+	//todo: handle sessions
+	sessionID := uuid.New()
+	resp, err := c.bs.ProcessMessage(ctx, userID, sessionID, msgs)
+	if err != nil {
+		c.logger.Errorf("proc msg: %v", err)
+		return nil, ErrProcMsg
+	}
+	// store sys message
+	go func() {
+		ctxn, cancel := context.WithTimeout(ctx, 2*time.Second)
+		defer cancel()
+		c.repository.CreateMessage(ctxn, userID, *resp)
+	}()
+	return resp, nil
+}
 
-// 	/*
-// 		// Legacy code - to be replaced with contract-based processing:
-// 		ar, err := c.assistant.ProcessPrompt(
-// 			ctx,
-// 			assistant.NewAssistantInput(
-// 				[]assistant.AssistantMessage{
-// 					msg.ToAssistantMessage(),
-// 				},
-// 				nil,
-// 			),
-// 		)
-// 		if err != nil {
-// 			return nil, fmt.Errorf("error processing message %v", err)
-// 		}
-// 		// store assistant message
-// 		response := Message{
-// 			Id:        ar.Id,
-// 			UserId:    userId,
-// 			Text:      ar.Response.Content,
-// 			Timestamp: ar.Response.CreatedAt,
-// 			MsgRole:   ar.Response.MsgRole,
-// 		}
-// 	*/
+// ProcessMsgAsStream implements ConversationService.
+func (c *conversationService) ProcessMsgAsStream(ctx context.Context, userID uuid.UUID, msg types.Message, sysMsgs []types.Message, outCh chan<- types.Message) error {
+	// store user msg
+	nmsg, err := c.repository.CreateMessage(ctx, userID, msg)
+	if err != nil {
+		return fmt.Errorf("couldn't save msg: %v", err)
+	}
+	// process msg in brain
+	msgs := make([]types.Message, 0)
+	msgs = append(msgs, sysMsgs...)
+	msgs = append(msgs, *nmsg)
+	//todo: handle sessions
+	sessionID := uuid.New()
+	err = c.bs.ProcessMessageWithStreaming(ctx, userID, sessionID, msgs, false)
+	return err
+}
 
-// 	// store assistant message
-// 	c.repository.CreateMessage(userId.String(), response)
-// 	return &response, nil
-// }
+// RetrieveConversation implements ConversationService.
+func (c *conversationService) RetrieveConversation(ctx context.Context, userID uuid.UUID) (*types.Conversation, error) {
+	csr := types.ConvFetchRequest{
+		Msr: &types.MemorySearchRequest{},
+	}
+	return c.repository.RetrieveUserConversation(ctx, userID, &csr)
+}
 
-// func NewConversation(
-// 	r ConversationRepository,
-// 	l *Logger.Logger,
-// ) ConversationManager {
-// 	return conversation{
-// 		logger:     l,
-// 		repository: r,
-// 	}
-// }
+func New(cfg config.Settings) ConversationService {
+	return &conversationService{}
+}

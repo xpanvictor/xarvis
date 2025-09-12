@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/xpanvictor/xarvis/internal/domains/conversation"
+	"github.com/xpanvictor/xarvis/internal/types"
 )
 
 // OffTimeRange represents a time range when the user is not available
@@ -29,7 +29,7 @@ type User struct {
 	CreatedAt   time.Time       `json:"createdAt" example:"2023-01-01T12:00:00Z"`
 	UpdatedAt   time.Time       `json:"updatedAt" example:"2023-01-01T12:00:00Z"`
 	// Relationships
-	ManagedConversation conversation.Conversation
+	ManagedConversation types.Conversation
 }
 
 // CreateUserRequest represents the data needed to create a new user

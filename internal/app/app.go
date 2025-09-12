@@ -3,10 +3,11 @@ package app
 import (
 	"time"
 
+	"github.com/go-redis/redis"
 	"github.com/xpanvictor/xarvis/internal/config"
 	"github.com/xpanvictor/xarvis/internal/domains/conversation"
 	"github.com/xpanvictor/xarvis/internal/domains/user"
-	"github.com/xpanvictor/xarvis/internal/repository"
+	convoRepo "github.com/xpanvictor/xarvis/internal/repository/conversation"
 	userRepo "github.com/xpanvictor/xarvis/internal/repository/user"
 	"github.com/xpanvictor/xarvis/internal/server"
 	"github.com/xpanvictor/xarvis/pkg/Logger"
@@ -21,6 +22,7 @@ type App struct {
 	Config           *config.Settings
 	Logger           *Logger.Logger
 	DB               *gorm.DB
+	RC               *redis.Client
 	DeviceRegistry   registry.DeviceRegistry
 	LLMRouter        *router.Mux
 	ConversationRepo conversation.ConversationRepository
@@ -50,7 +52,7 @@ func (a *App) setupDependencies() error {
 	a.DeviceRegistry = memoryregistry.New()
 
 	// 2. Set up conversation repository
-	a.ConversationRepo = repository.NewGormConversationRepo(a.DB)
+	a.ConversationRepo = convoRepo.NewGormConvoRepo(a.DB, a.RC, time.Duration(a.Config.BrainConfig.MsgTTLMins*int64(time.Minute)))
 
 	// 3. Set up user repository and service
 	a.UserRepo = userRepo.NewGormUserRepo(a.DB)

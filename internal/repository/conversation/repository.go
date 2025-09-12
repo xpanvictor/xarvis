@@ -9,7 +9,7 @@ import (
 	"github.com/go-redis/redis"
 	"github.com/google/uuid"
 	"github.com/xpanvictor/xarvis/internal/database/dbtypes"
-	"github.com/xpanvictor/xarvis/internal/domains/conversation"
+	"github.com/xpanvictor/xarvis/internal/types"
 	"github.com/xpanvictor/xarvis/pkg/utils"
 	"gorm.io/gorm"
 )
@@ -25,8 +25,8 @@ func UserMsgListKey(userID uuid.UUID) string {
 	return fmt.Sprintf("user:%s:msgs", userID.String())
 }
 
-// CreateMemory implements conversation.ConversationRepository.
-func (g *GormConversationrepo) CreateMemory(ctx context.Context, conversationID uuid.UUID, m conversation.Memory) (*conversation.Memory, error) {
+// CreateMemory implements types.ConversationRepository.
+func (g *GormConversationrepo) CreateMemory(ctx context.Context, conversationID uuid.UUID, m types.Memory) (*types.Memory, error) {
 	me := &MemoryEntity{}
 	embed, err := g.embedFunc(ctx, m.Content)
 	if err != nil {
@@ -40,8 +40,8 @@ func (g *GormConversationrepo) CreateMemory(ctx context.Context, conversationID 
 	return me.ToDomain(), nil
 }
 
-// CreateMessage implements conversation.ConversationRepository.
-func (g *GormConversationrepo) CreateMessage(ctx context.Context, userId uuid.UUID, msg conversation.Message) (*conversation.Message, error) {
+// CreateMessage implements types.ConversationRepository.
+func (g *GormConversationrepo) CreateMessage(ctx context.Context, userId uuid.UUID, msg types.Message) (*types.Message, error) {
 	lmsg := MessageEntity{}
 	lmsg.FromDomain(&msg)
 
@@ -66,8 +66,8 @@ func (g *GormConversationrepo) CreateMessage(ctx context.Context, userId uuid.UU
 	return &msg, nil
 }
 
-// FetchMessage implements conversation.ConversationRepository.
-func (g *GormConversationrepo) FetchMessage(ctx context.Context, msgId uuid.UUID) (*conversation.Message, error) {
+// FetchMessage implements types.ConversationRepository.
+func (g *GormConversationrepo) FetchMessage(ctx context.Context, msgId uuid.UUID) (*types.Message, error) {
 	var msg MessageEntity
 	rawMsg, err := g.rc.Get(msgId.String()).Result()
 	if err != nil {
@@ -81,10 +81,10 @@ func (g *GormConversationrepo) FetchMessage(ctx context.Context, msgId uuid.UUID
 	return msg.ToDomain(), nil
 }
 
-// FetchUserMessages implements conversation.ConversationRepository.
-func (g *GormConversationrepo) FetchUserMessages(ctx context.Context, userId uuid.UUID, start, end int64) ([]conversation.Message, error) {
+// FetchUserMessages implements types.ConversationRepository.
+func (g *GormConversationrepo) FetchUserMessages(ctx context.Context, userId uuid.UUID, start, end int64) ([]types.Message, error) {
 	// fetch from redis store
-	var msgs []conversation.Message
+	var msgs []types.Message
 	rawIds, err := g.rc.ZRange(UserMsgListKey(userId), start, end).Result()
 	if err != nil {
 		return nil, err
@@ -103,8 +103,8 @@ func (g *GormConversationrepo) FetchUserMessages(ctx context.Context, userId uui
 	return msgs, nil
 }
 
-// FindMemories implements conversation.ConversationRepository.
-func (g *GormConversationrepo) FindMemories(ctx context.Context, conversationID uuid.UUID, msr conversation.MemorySearchRequest) ([]conversation.Memory, error) {
+// FindMemories implements types.ConversationRepository.
+func (g *GormConversationrepo) FindMemories(ctx context.Context, conversationID uuid.UUID, msr types.MemorySearchRequest) ([]types.Memory, error) {
 	// first check for vector search
 	if msr.QueryStatement != nil {
 		queryVec, err := g.embedFunc(ctx, *msr.QueryStatement)
@@ -122,7 +122,7 @@ func (g *GormConversationrepo) FindMemories(ctx context.Context, conversationID 
 		if err := g.db.Raw(sql, dbtypes.XVector(queryVec), conversationID).Scan(&entities).Error; err != nil {
 			return nil, err
 		}
-		var dms []conversation.Memory
+		var dms []types.Memory
 		for _, m := range entities {
 			dms = append(dms, *m.ToDomain())
 		}
@@ -144,7 +144,7 @@ func (g *GormConversationrepo) FindMemories(ctx context.Context, conversationID 
 	if err := base.Find(&entities).Error; err != nil {
 		return nil, err
 	}
-	var dms []conversation.Memory
+	var dms []types.Memory
 	for _, m := range entities {
 		dms = append(dms, *m.ToDomain())
 	}
@@ -152,8 +152,8 @@ func (g *GormConversationrepo) FindMemories(ctx context.Context, conversationID 
 
 }
 
-// RetrieveUserConversation implements conversation.ConversationRepository.
-func (g *GormConversationrepo) RetrieveUserConversation(ctx context.Context, userID uuid.UUID, csr *conversation.ConvFetchRequest) (*conversation.Conversation, error) {
+// RetrieveUserConversation implements types.ConversationRepository.
+func (g *GormConversationrepo) RetrieveUserConversation(ctx context.Context, userID uuid.UUID, csr *types.ConvFetchRequest) (*types.Conversation, error) {
 	// fetch conversation
 	var conv ConversationEntity
 	if err := g.db.WithContext(ctx).Where("OwnerID = ?", userID).Preload("Memories").First(&conv).Error; err != nil {
@@ -176,7 +176,7 @@ func (g *GormConversationrepo) RetrieveUserConversation(ctx context.Context, use
 	return &dconv, nil
 }
 
-func NewGormConvoRepo(db *gorm.DB, rc *redis.Client, msgTTL time.Duration) conversation.ConversationRepository {
+func NewGormConvoRepo(db *gorm.DB, rc *redis.Client, msgTTL time.Duration) types.ConversationRepository {
 	return &GormConversationrepo{
 		db: db, rc: rc, msgTTL: msgTTL,
 	}

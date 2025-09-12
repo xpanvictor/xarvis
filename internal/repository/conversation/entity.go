@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/xpanvictor/xarvis/internal/database/dbtypes"
-	"github.com/xpanvictor/xarvis/internal/domains/conversation"
+	"github.com/xpanvictor/xarvis/internal/types"
 	"github.com/xpanvictor/xarvis/pkg/assistant"
 	"gorm.io/gorm"
 )
@@ -26,7 +26,7 @@ type MemoryEntity struct {
 	DeletedAt gorm.DeletedAt `gorm:"index"` // For soft delete
 }
 
-func (me *MemoryEntity) FromDomain(m conversation.Memory, embeddings []float32) {
+func (me *MemoryEntity) FromDomain(m types.Memory, embeddings []float32) {
 	me.ID = m.ID
 	me.Content = m.Content
 	me.CreatedAt = m.CreatedAt
@@ -40,11 +40,11 @@ func (me *MemoryEntity) FromDomain(m conversation.Memory, embeddings []float32) 
 	me.EmbeddingRef = xembeddings
 }
 
-func (me *MemoryEntity) ToDomain() *conversation.Memory {
-	return &conversation.Memory{
+func (me *MemoryEntity) ToDomain() *types.Memory {
+	return &types.Memory{
 		ID:             me.ID,
 		ConversationID: me.ConversationID,
-		Type:           conversation.MemoryType(me.Type),
+		Type:           types.MemoryType(me.Type),
 		SaliencyScore:  me.SaliencyScore,
 		Content:        me.Content,
 		// no need for embeddings
@@ -65,16 +65,16 @@ type ConversationEntity struct {
 	Memories []MemoryEntity  `gorm:"type:json"`
 }
 
-func (c *ConversationEntity) ToDomain() conversation.Conversation {
-	var msgs []conversation.Message
+func (c *ConversationEntity) ToDomain() types.Conversation {
+	var msgs []types.Message
 	for _, m := range c.Messages {
 		msgs = append(msgs, *m.ToDomain())
 	}
-	var mems []conversation.Memory
+	var mems []types.Memory
 	for _, m := range c.Memories {
 		mems = append(mems, *m.ToDomain())
 	}
-	return conversation.Conversation{
+	return types.Conversation{
 		ID:        c.ID,
 		OwnerID:   c.OwnerID,
 		CreatedAt: c.CreatedAt,
@@ -104,8 +104,8 @@ func (ce *ConversationEntity) ConvoKey(k uuid.UUID) string {
 	return fmt.Sprintf("conv:%s", ce.ID.String())
 }
 
-func (me *MessageEntity) ToDomain() *conversation.Message {
-	return &conversation.Message{
+func (me *MessageEntity) ToDomain() *types.Message {
+	return &types.Message{
 		Id:             me.ID,
 		UserId:         me.UserID,
 		ConversationID: me.ConversationID,
@@ -117,7 +117,7 @@ func (me *MessageEntity) ToDomain() *conversation.Message {
 	}
 }
 
-func (me *MessageEntity) FromDomain(msg *conversation.Message) {
+func (me *MessageEntity) FromDomain(msg *types.Message) {
 	me.ID = msg.Id
 	me.ConversationID = msg.ConversationID
 	me.Tags = msg.Tags

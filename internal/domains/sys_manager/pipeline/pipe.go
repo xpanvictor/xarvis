@@ -38,6 +38,8 @@ func (p *Pipeline) Broadcast(
 	userID uuid.UUID,
 	sessionID uuid.UUID,
 	rc *adapters.ContractResponseChannel, // chan []AdapterOutput (pointer)
+	// todo: disable audio
+	disableAudio bool,
 ) error {
 	// Channel for text deltas to the streamer. Buffered to reduce backpressure stalls.
 	wordCh := make(chan string, 64)

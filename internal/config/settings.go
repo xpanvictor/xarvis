@@ -55,7 +55,8 @@ type AssistantKeysObj struct {
 }
 
 type BrainConfig struct {
-	MaxToolCallLimit int `mapstructure:"max_tool_call_limit"`
+	MaxToolCallLimit int   `mapstructure:"max_tool_call_limit"`
+	MsgTTLMins       int64 `mapstructure:"msg_ttl_mins"`
 }
 
 type SysModelsConfig struct {

@@ -1,7 +1,6 @@
 package database
 
 import (
-	"github.com/xpanvictor/xarvis/internal/repository"
 	"github.com/xpanvictor/xarvis/internal/repository/conversation"
 	userRepo "github.com/xpanvictor/xarvis/internal/repository/user"
 	"gorm.io/gorm"
@@ -10,7 +9,7 @@ import (
 func MigrateDB(db *gorm.DB) {
 	db.AutoMigrate(
 		&userRepo.UserEntity{},
-		&repository.GormConvoRepo{},
+		&conversation.ConversationEntity{},
 		&conversation.MemoryEntity{},
 	)
 

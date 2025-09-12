@@ -13,8 +13,6 @@ require (
 	github.com/ollama/ollama v0.3.7
 	github.com/openai/openai-go v1.12.0
 	github.com/presbrey/ollamafarm v1.1.1
-	github.com/redis/go-redis v6.15.9+incompatible
-	github.com/redis/go-redis/v9 v9.14.0
 	github.com/smallnest/ringbuffer v0.0.0-20250317021400-0da97b586904
 	github.com/spf13/viper v1.20.1
 	github.com/swaggo/files v1.0.1
@@ -40,9 +38,7 @@ require (
 	github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578 // indirect
 	github.com/bytedance/sonic v1.14.0 // indirect
 	github.com/bytedance/sonic/loader v0.3.0 // indirect
-	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
-	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/fsnotify/fsnotify v1.8.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.9 // indirect

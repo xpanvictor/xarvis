@@ -16,11 +16,12 @@ import (
 	ginSwagger "github.com/swaggo/gin-swagger"
 	"github.com/xpanvictor/xarvis/internal/config"
 	"github.com/xpanvictor/xarvis/internal/domains/conversation"
-	"github.com/xpanvictor/xarvis/internal/domains/conversation/brain"
 	"github.com/xpanvictor/xarvis/internal/domains/sys_manager/pipeline"
 	vss "github.com/xpanvictor/xarvis/internal/domains/sys_manager/voice_stream_system"
 	"github.com/xpanvictor/xarvis/internal/domains/user"
 	"github.com/xpanvictor/xarvis/internal/handlers"
+	"github.com/xpanvictor/xarvis/internal/runtime/brain"
+	"github.com/xpanvictor/xarvis/internal/types"
 	"github.com/xpanvictor/xarvis/pkg/Logger"
 	"github.com/xpanvictor/xarvis/pkg/assistant"
 	"github.com/xpanvictor/xarvis/pkg/assistant/adapters"
@@ -328,7 +329,7 @@ func (rm *RoutesManager) handleBinaryMessage(userConn *UserConnection, msgBytes 
 }
 
 func (rm *RoutesManager) processTextInput(userConn *UserConnection, text string) {
-	msg := conversation.Message{
+	msg := types.Message{
 		Id:        uuid.New(),
 		UserId:    userConn.UserID,
 		Text:      text,
@@ -342,7 +343,7 @@ func (rm *RoutesManager) processTextInput(userConn *UserConnection, text string)
 	// Process through brain system
 	go func() {
 		ctx := context.Background()
-		err := userConn.BrainSystem.ProcessMessageWithStreaming(ctx, userConn.UserID, userConn.SessionID, msg)
+		err := userConn.BrainSystem.ProcessMessageWithStreaming(ctx, userConn.UserID, userConn.SessionID, []types.Message{msg}, false)
 		if err != nil {
 			rm.deps.Logger.Errorf("brain processing error for user %s: %v", userConn.UserID, err)
 		}
@@ -516,7 +517,7 @@ func (rm *RoutesManager) handleTextWebSocket(c *gin.Context) {
 			text := string(msgBytes)
 
 			// Process as conversation message
-			msg := conversation.Message{
+			msg := types.Message{
 				Id:        uuid.New(),
 				UserId:    userID,
 				Text:      text,
@@ -528,7 +529,7 @@ func (rm *RoutesManager) handleTextWebSocket(c *gin.Context) {
 			// Process through brain system
 			go func() {
 				ctx := context.Background()
-				err := brainSystem.ProcessMessageWithStreaming(ctx, userID, sessionID, msg)
+				err := brainSystem.ProcessMessageWithStreaming(ctx, userID, sessionID, []types.Message{msg}, false)
 				if err != nil {
 					rm.deps.Logger.Errorf("text brain processing error: %v", err)
 				}
@@ -596,7 +597,7 @@ func (rm *RoutesManager) handleVSSInterrupt(userConn *UserConnection, event vss.
 			userConn.UserID, interruptData.Transcription, interruptData.Confidence)
 
 		// Create conversation message from transcription
-		msg := conversation.Message{
+		msg := types.Message{
 			Id:        uuid.New(),
 			UserId:    userConn.UserID,
 			Text:      interruptData.Transcription,
@@ -608,7 +609,7 @@ func (rm *RoutesManager) handleVSSInterrupt(userConn *UserConnection, event vss.
 		// Process through brain system
 		go func() {
 			ctx := context.Background()
-			err := userConn.BrainSystem.ProcessMessageWithStreaming(ctx, userConn.UserID, userConn.SessionID, msg)
+			err := userConn.BrainSystem.ProcessMessageWithStreaming(ctx, userConn.UserID, userConn.SessionID, []types.Message{msg}, false)
 			if err != nil {
 				rm.deps.Logger.Errorf("brain processing error for VSS interrupt from user %s: %v", userConn.UserID, err)
 			} else {
@@ -761,7 +762,7 @@ func QuickDemo(
 			log.Printf("got error %v", err)
 		}
 	}()
-	_ = pl.Broadcast(ctx, userID, sessionID, &rsp)
+	_ = pl.Broadcast(ctx, userID, sessionID, &rsp, false)
 
 	log.Printf("demo finished for user %s / session %s", userID, sessionID)
 }
