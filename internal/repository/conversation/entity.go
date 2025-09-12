@@ -19,11 +19,38 @@ type MemoryEntity struct {
 	SaliencyScore uint8  `gorm:"column:saliency_score;type:varchar(255)"` // Ever growing saliency score MRU
 	Content       string `gorm:"type:varchar(255)"`
 	// Embeddings
-	EmbeddingRef dbtypes.XVector `gorm:"type:varchar(255)"`
+	EmbeddingRef dbtypes.XVector `gorm:"type:vector(768)"`
 
 	CreatedAt time.Time      `gorm:"autoCreateTime(3)"`
 	UpdatedAt time.Time      `gorm:"autoUpdateTime(3)"`
 	DeletedAt gorm.DeletedAt `gorm:"index"` // For soft delete
+}
+
+func (me *MemoryEntity) FromDomain(m conversation.Memory, embeddings []float32) {
+	me.ID = m.ID
+	me.Content = m.Content
+	me.CreatedAt = m.CreatedAt
+	me.UpdatedAt = m.UpdatedAt
+	me.Type = string(m.Type)
+	me.SaliencyScore = m.SaliencyScore
+	me.ConversationID = m.ConversationID
+
+	// embeddings
+	xembeddings := dbtypes.XVector(embeddings)
+	me.EmbeddingRef = xembeddings
+}
+
+func (me *MemoryEntity) ToDomain() *conversation.Memory {
+	return &conversation.Memory{
+		ID:             me.ID,
+		ConversationID: me.ConversationID,
+		Type:           conversation.MemoryType(me.Type),
+		SaliencyScore:  me.SaliencyScore,
+		Content:        me.Content,
+		// no need for embeddings
+		CreatedAt: me.CreatedAt,
+		UpdatedAt: me.UpdatedAt,
+	}
 }
 
 type ConversationEntity struct {
@@ -36,6 +63,26 @@ type ConversationEntity struct {
 	// Relationships
 	Messages []MessageEntity `json:"messages"` // - won't be persisted to db
 	Memories []MemoryEntity  `gorm:"type:json"`
+}
+
+func (c *ConversationEntity) ToDomain() conversation.Conversation {
+	var msgs []conversation.Message
+	for _, m := range c.Messages {
+		msgs = append(msgs, *m.ToDomain())
+	}
+	var mems []conversation.Memory
+	for _, m := range c.Memories {
+		mems = append(mems, *m.ToDomain())
+	}
+	return conversation.Conversation{
+		ID:        c.ID,
+		OwnerID:   c.OwnerID,
+		CreatedAt: c.CreatedAt,
+		UpdatedAt: c.UpdatedAt,
+		Summary:   c.Summary,
+		Messages:  msgs,
+		Memories:  mems,
+	}
 }
 
 type MessageEntity struct {

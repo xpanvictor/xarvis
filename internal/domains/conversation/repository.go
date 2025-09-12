@@ -35,9 +35,9 @@ type Memory struct {
 	SaliencyScore  uint8      `json:"saliency_score"` // Ever growing saliency score MRU
 	Content        string     `json:"string"`
 	// Embeddings
-	EmbeddingRef any       `json:"embedding_ref"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	// EmbeddingRef any       `json:"embedding_ref"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 type Conversation struct {
@@ -54,18 +54,25 @@ type Conversation struct {
 type MemorySearchRequest struct {
 	WithinPeriod  *utils.Range[time.Time]
 	SaliencyRange *utils.Range[uint8]
+	// QueryVec *dbtypes.XVector
+	QueryStatement *string // converted to vector
+}
+
+type ConvFetchRequest struct {
+	Msr       *MemorySearchRequest
+	MsgSearch *utils.Range[uint64]
 }
 
 // Single conversation per user
 type ConversationRepository interface {
 	// Conversation
-	RetrieveUserConversation(userID uuid.UUID) (*Conversation, error) // creates if doesn't exist
+	RetrieveUserConversation(ctx context.Context, userID uuid.UUID, csr *ConvFetchRequest) (*Conversation, error) // creates if doesn't exist
 	// Messages
 	CreateMessage(ctx context.Context, userId uuid.UUID, msg Message) (*Message, error)
 	FetchUserMessages(ctx context.Context, userId uuid.UUID, start, end int64) ([]Message, error)
 	FetchMessage(ctx context.Context, msgId uuid.UUID) (*Message, error)
 	// Memories
-	FindMemories(conversationID uuid.UUID, msr MemorySearchRequest) ([]Memory, error)
+	FindMemories(ctx context.Context, conversationID uuid.UUID, msr MemorySearchRequest) ([]Memory, error)
 	CreateMemory(ctx context.Context, conversationID uuid.UUID, m Memory) (*Memory, error)
 }
 
