@@ -61,8 +61,8 @@ type ConversationEntity struct {
 	DeletedAt gorm.DeletedAt `gorm:"index"` // For soft delete
 	Summary   string         `gorm:"type:varchar(255)"`
 	// Relationships
-	Messages []MessageEntity `json:"messages"` // - won't be persisted to db
-	Memories []MemoryEntity  `gorm:"type:json"`
+	Messages []MessageEntity `json:"messages" gorm:"-"` // - won't be persisted to db, ignored by GORM
+	Memories []MemoryEntity  `gorm:"-"`                 // handled separately, not as association
 }
 
 func (c *ConversationEntity) ToDomain() types.Conversation {
@@ -90,7 +90,7 @@ type MessageEntity struct {
 	UserID         uuid.UUID `json:"user_id"`
 	ConversationID uuid.UUID `json:"conversation_id"`
 	Text           string    `json:"text"`
-	Tags           []string  `json:"tags"`
+	Tags           []string  `json:"tags" gorm:"-"` // Not persisted to DB, stored in Redis
 	Timestamp      time.Time `json:"timestamp"`
 	// use diff enum
 	MsgRole assistant.Role `json:"msg_role"`

@@ -79,7 +79,7 @@ type MemorySearchRequest struct {
 
 type ConvFetchRequest struct {
 	Msr       *MemorySearchRequest
-	MsgSearch *utils.Range[uint64]
+	MsgSearch *utils.Range[int64]
 }
 
 // Single conversation per user

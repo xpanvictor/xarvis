@@ -176,7 +176,7 @@ func (b *Brain) Decide(ctx context.Context, msgs []types.Message, responseChanne
 
 	return types.Message{
 		Id:        uuid.New(),
-		UserId:    msgs[0].UserId,
+		UserId:    msgs[len(msgs)-1].UserId,
 		Text:      finalContent,
 		Timestamp: time.Now(),
 		MsgRole:   assistant.ASSISTANT,

@@ -44,6 +44,7 @@ func (g *GormConversationrepo) CreateMemory(ctx context.Context, conversationID 
 func (g *GormConversationrepo) CreateMessage(ctx context.Context, userId uuid.UUID, msg types.Message) (*types.Message, error) {
 	lmsg := MessageEntity{}
 	lmsg.FromDomain(&msg)
+	lmsg.UserID = userId // for ai responses
 
 	data, err := json.Marshal(lmsg)
 	if err != nil {
@@ -69,12 +70,14 @@ func (g *GormConversationrepo) CreateMessage(ctx context.Context, userId uuid.UU
 // FetchMessage implements types.ConversationRepository.
 func (g *GormConversationrepo) FetchMessage(ctx context.Context, msgId uuid.UUID) (*types.Message, error) {
 	var msg MessageEntity
-	rawMsg, err := g.rc.Get(msgId.String()).Result()
+	// Create the proper Redis key format
+	msgKey := fmt.Sprintf("msg:%s", msgId.String())
+	rawMsg, err := g.rc.Get(msgKey).Result()
 	if err != nil {
 		return nil, err
 	}
 
-	if err != json.Unmarshal([]byte(rawMsg), &msg) {
+	if err := json.Unmarshal([]byte(rawMsg), &msg); err != nil {
 		return nil, err
 	}
 
@@ -89,16 +92,19 @@ func (g *GormConversationrepo) FetchUserMessages(ctx context.Context, userId uui
 	if err != nil {
 		return nil, err
 	}
-	for _, rawId := range rawIds {
-		if id, err := uuid.Parse(rawId); err != nil {
-			msg, err := g.FetchMessage(ctx, id)
-			if err != nil {
-				continue
-			}
-			msgs = append(msgs, *msg)
-		} else {
-			continue
+	for _, rawKey := range rawIds {
+		// rawKey is the message key like "msg:uuid", use it directly to fetch from Redis
+		var msg MessageEntity
+		rawMsg, err := g.rc.Get(rawKey).Result()
+		if err != nil {
+			continue // message might have expired
 		}
+
+		if err := json.Unmarshal([]byte(rawMsg), &msg); err != nil {
+			continue // corrupted data
+		}
+
+		msgs = append(msgs, *msg.ToDomain())
 	}
 	return msgs, nil
 }
@@ -156,7 +162,7 @@ func (g *GormConversationrepo) FindMemories(ctx context.Context, conversationID 
 func (g *GormConversationrepo) RetrieveUserConversation(ctx context.Context, userID uuid.UUID, csr *types.ConvFetchRequest) (*types.Conversation, error) {
 	// fetch conversation
 	var conv ConversationEntity
-	if err := g.db.WithContext(ctx).Where("OwnerID = ?", userID).Preload("Memories").First(&conv).Error; err != nil {
+	if err := g.db.WithContext(ctx).Where("owner_id = ?", userID).First(&conv).Error; err != nil {
 		// create new conv then
 		conv = ConversationEntity{
 			ID:        uuid.New(),
@@ -164,15 +170,22 @@ func (g *GormConversationrepo) RetrieveUserConversation(ctx context.Context, use
 			CreatedAt: time.Now(),
 			UpdatedAt: time.Now(),
 		}
-		if err := g.db.WithContext(ctx).Create(conv).Error; err != nil {
+		if err := g.db.WithContext(ctx).Create(&conv).Error; err != nil {
 			return nil, err
 		}
 	}
 	// fetch all msgs
+	if csr.MsgSearch == nil {
+		start := int64(0)
+		end := int64(-1) // -1 means fetch until the end (all messages)
+		csr.MsgSearch = &utils.Range[int64]{Min: &start, Max: &end}
+	}
 	msgs, _ := g.FetchUserMessages(ctx, userID, int64(*csr.MsgSearch.Min), int64(*csr.MsgSearch.Max))
-	// mems, _ := g.FindMemories(ctx, conv.ID, *csr.Msr)
+	// fetch memories separately
+	mems, _ := g.FindMemories(ctx, conv.ID, *csr.Msr)
 	dconv := conv.ToDomain()
 	dconv.Messages = append(dconv.Messages, msgs...)
+	dconv.Memories = append(dconv.Memories, mems...)
 	return &dconv, nil
 }
 
