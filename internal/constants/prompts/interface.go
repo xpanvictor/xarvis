@@ -1,6 +1,9 @@
 package prompts
 
-import "github.com/xpanvictor/xarvis/pkg/assistant/adapters"
+import (
+	"github.com/xpanvictor/xarvis/internal/types"
+	"github.com/xpanvictor/xarvis/pkg/assistant"
+)
 
 type PromptDefinition struct {
 	Content string
@@ -13,9 +16,18 @@ type SYS_PROMPT struct {
 	Items          map[float32]PromptDefinition // version-content
 }
 
-func (pd PromptDefinition) ToContractMessage() adapters.ContractMessage {
-	return adapters.ContractMessage{
-		Role:    adapters.ASSISTANT,
-		Content: pd.Content,
+func (sp *SYS_PROMPT) GetVersion(version float32) (PromptDefinition, bool) {
+	i, ok := sp.Items[version]
+	return i, ok
+}
+
+func (sp *SYS_PROMPT) GetCurrentPrompt() PromptDefinition {
+	return sp.Items[sp.CurrentVersion]
+}
+
+func (pd PromptDefinition) ToMessage() types.Message {
+	return types.Message{
+		MsgRole: assistant.ASSISTANT,
+		Text:    pd.Content,
 	}
 }

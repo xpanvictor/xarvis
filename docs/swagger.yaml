@@ -1,5 +1,22 @@
 basePath: /api/v1
 definitions:
+  assistant.Role:
+    enum:
+    - user
+    - assistant
+    - system
+    - tool
+    type: string
+    x-enum-varnames:
+    - USER
+    - ASSISTANT
+    - SYSTEM
+    - TOOL
+  handlers.ConversationResponse:
+    properties:
+      conversation:
+        $ref: '#/definitions/types.Conversation'
+    type: object
   handlers.DeleteAccountResponse:
     properties:
       message:
@@ -33,6 +50,11 @@ definitions:
         $ref: '#/definitions/user.AuthTokens'
       user:
         $ref: '#/definitions/user.UserResponse'
+    type: object
+  handlers.MessageResponse:
+    properties:
+      message:
+        $ref: '#/definitions/types.Message'
     type: object
   handlers.PaginationInfo:
     properties:
@@ -87,6 +109,90 @@ definitions:
     properties:
       user:
         $ref: '#/definitions/user.UserResponse'
+    type: object
+  types.Conversation:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: string
+      memories:
+        items:
+          $ref: '#/definitions/types.Memory'
+        type: array
+      messages:
+        description: Relationships
+        items:
+          $ref: '#/definitions/types.Message'
+        type: array
+      owner_id:
+        type: string
+      summary:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  types.CreateMessage:
+    description: Msg creation body
+    properties:
+      text:
+        example: Hey friend, remind me to call a friend tomorrow
+        type: string
+      timestamp:
+        example: "2023-12-25T09:00:00Z"
+        type: string
+    required:
+    - text
+    - timestamp
+    type: object
+  types.Memory:
+    properties:
+      conversation_id:
+        type: string
+      created_at:
+        description: |-
+          Embeddings
+          EmbeddingRef any       `json:"embedding_ref"`
+        type: string
+      id:
+        example: ""
+        type: string
+      memory_type:
+        $ref: '#/definitions/types.MemoryType'
+      saliency_score:
+        description: Ever growing saliency score MRU
+        type: integer
+      string:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  types.MemoryType:
+    enum:
+    - episodic
+    - semantic
+    type: string
+    x-enum-varnames:
+    - EPISODIC
+    - SEMANTIC
+  types.Message:
+    properties:
+      conversation_id:
+        type: string
+      id:
+        type: string
+      msg_role:
+        $ref: '#/definitions/assistant.Role'
+      tags:
+        items:
+          type: string
+        type: array
+      text:
+        type: string
+      timestamp:
+        type: string
+      user_id:
+        type: string
     type: object
   user.AuthTokens:
     description: JWT authentication tokens
@@ -396,6 +502,69 @@ paths:
       summary: Register a new user
       tags:
       - Authentication
+  /conversation:
+    get:
+      consumes:
+      - application/json
+      description: Retrieves the conversation history for the authenticated user including
+        messages and memories
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: User conversation data
+          schema:
+            $ref: '#/definitions/handlers.ConversationResponse'
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Retrieve user conversation
+      tags:
+      - Conversation
+  /conversation/message:
+    post:
+      consumes:
+      - application/json
+      description: Processes a user message through the conversation service and returns
+        an AI-generated response
+      parameters:
+      - description: User message data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/types.CreateMessage'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: AI response message
+          schema:
+            $ref: '#/definitions/handlers.MessageResponse'
+        "400":
+          description: Invalid request data
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error or couldn't process message
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Process user message and generate AI response
+      tags:
+      - Conversation
   /user/account:
     delete:
       consumes:

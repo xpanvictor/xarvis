@@ -59,7 +59,7 @@ func (g *GormConversationrepo) CreateMessage(ctx context.Context, userId uuid.UU
 	if err := g.rc.ZAdd(UserMsgListKey(msg.UserId), redis.Z{
 		Member: lmsg.Key(),
 		Score:  score,
-	}); err != nil {
+	}).Err(); err != nil {
 		return nil, utils.XError{Reason: "unable to add to user msg list", Meta: err}.ToError()
 	}
 

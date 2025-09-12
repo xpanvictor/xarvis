@@ -19,24 +19,25 @@ import (
 
 // App represents the application with all its dependencies
 type App struct {
-	Config           *config.Settings
-	Logger           *Logger.Logger
-	DB               *gorm.DB
-	RC               *redis.Client
-	DeviceRegistry   registry.DeviceRegistry
-	LLMRouter        *router.Mux
+	Config         *config.Settings
+	Logger         *Logger.Logger
+	DB             *gorm.DB
+	RC             *redis.Client
+	DeviceRegistry registry.DeviceRegistry
+	LLMRouter      *router.Mux
+	// repos
 	ConversationRepo conversation.ConversationRepository
 	UserRepo         user.UserRepository
-	UserService      user.UserService
 	ServerDeps       server.Dependencies
 }
 
 // NewApp creates a new application instance with all dependencies properly wired
-func NewApp(cfg *config.Settings, logger *Logger.Logger, db *gorm.DB) (*App, error) {
+func NewApp(cfg *config.Settings, logger *Logger.Logger, db *gorm.DB, rc *redis.Client) (*App, error) {
 	app := &App{
 		Config: cfg,
 		Logger: logger,
 		DB:     db,
+		RC:     rc,
 	}
 
 	if err := app.setupDependencies(); err != nil {
@@ -50,11 +51,22 @@ func NewApp(cfg *config.Settings, logger *Logger.Logger, db *gorm.DB) (*App, err
 func (a *App) setupDependencies() error {
 	// 1. Create shared device registry
 	a.DeviceRegistry = memoryregistry.New()
+	//  Set up LLM providers and router
+	if err := a.setupLLMRouter(); err != nil {
+		return err
+	}
 
-	// 2. Set up conversation repository
+	// 2. setup deps
+	deps := server.NewServerDependencies(
+		a.ConversationRepo,
+		a.DeviceRegistry,
+		a.LLMRouter,
+		a.Config.BrainConfig,
+		a.Logger,
+		a.Config,
+	)
+	// 3. Set up repositories
 	a.ConversationRepo = convoRepo.NewGormConvoRepo(a.DB, a.RC, time.Duration(a.Config.BrainConfig.MsgTTLMins*int64(time.Minute)))
-
-	// 3. Set up user repository and service
 	a.UserRepo = userRepo.NewGormUserRepo(a.DB)
 
 	// JWT settings from config
@@ -70,23 +82,17 @@ func (a *App) setupDependencies() error {
 	}
 	tokenTTL := time.Duration(tokenTTLHours) * time.Hour
 
-	a.UserService = user.NewUserService(a.UserRepo, a.Logger, jwtSecret, tokenTTL)
-
-	// 4. Set up LLM providers and router
-	if err := a.setupLLMRouter(); err != nil {
-		return err
-	}
-
-	// 5. Create server dependencies
-	a.ServerDeps = server.NewServerDependencies(
+	// add services
+	deps.UserService = user.NewUserService(a.UserRepo, a.Logger, jwtSecret, tokenTTL)
+	deps.ConversationService = conversation.New(
+		*deps.Configs,
+		deps.Mux,
+		deps.DeviceRegistry,
+		deps.Logger,
 		a.ConversationRepo,
-		a.DeviceRegistry,
-		a.LLMRouter,
-		a.Config.BrainConfig,
-		a.Logger,
-		a.Config,
-		a.UserService,
-	)
+	) // Create conversation service
+
+	a.ServerDeps = deps
 
 	return nil
 }

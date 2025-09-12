@@ -24,7 +24,7 @@ type BrainSystem struct {
 	Brain    *Brain
 	Registry toolsystem.Registry
 	Pipeline *pipeline.Pipeline
-	logger   Logger.Logger
+	logger   *Logger.Logger
 }
 
 // NewBrainSystem creates a BrainSystem with the provided dependencies
@@ -33,7 +33,7 @@ func NewBrainSystem(
 	globalMux *router.Mux, // Use the shared global router
 	deviceReg registry.DeviceRegistry,
 	piperURL *url.URL,
-	logger Logger.Logger,
+	logger *Logger.Logger,
 ) *BrainSystem {
 	// Create tool registry and executor
 	toolRegistry := toolsystem.NewMemoryRegistry()

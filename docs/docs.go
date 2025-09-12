@@ -309,6 +309,103 @@ const docTemplate = `{
                 }
             }
         },
+        "/conversation": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieves the conversation history for the authenticated user including messages and memories",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Conversation"
+                ],
+                "summary": "Retrieve user conversation",
+                "responses": {
+                    "200": {
+                        "description": "User conversation data",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ConversationResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "User not authenticated",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/conversation/message": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Processes a user message through the conversation service and returns an AI-generated response",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Conversation"
+                ],
+                "summary": "Process user message and generate AI response",
+                "parameters": [
+                    {
+                        "description": "User message data",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/types.CreateMessage"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "AI response message",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.MessageResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request data",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "User not authenticated",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error or couldn't process message",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/user/account": {
             "delete": {
                 "security": [
@@ -464,6 +561,29 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "assistant.Role": {
+            "type": "string",
+            "enum": [
+                "user",
+                "assistant",
+                "system",
+                "tool"
+            ],
+            "x-enum-varnames": [
+                "USER",
+                "ASSISTANT",
+                "SYSTEM",
+                "TOOL"
+            ]
+        },
+        "handlers.ConversationResponse": {
+            "type": "object",
+            "properties": {
+                "conversation": {
+                    "$ref": "#/definitions/types.Conversation"
+                }
+            }
+        },
         "handlers.DeleteAccountResponse": {
             "type": "object",
             "properties": {
@@ -512,6 +632,14 @@ const docTemplate = `{
                 },
                 "user": {
                     "$ref": "#/definitions/user.UserResponse"
+                }
+            }
+        },
+        "handlers.MessageResponse": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "$ref": "#/definitions/types.Message"
                 }
             }
         },
@@ -593,6 +721,126 @@ const docTemplate = `{
             "properties": {
                 "user": {
                     "$ref": "#/definitions/user.UserResponse"
+                }
+            }
+        },
+        "types.Conversation": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "memories": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/types.Memory"
+                    }
+                },
+                "messages": {
+                    "description": "Relationships",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/types.Message"
+                    }
+                },
+                "owner_id": {
+                    "type": "string"
+                },
+                "summary": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "types.CreateMessage": {
+            "description": "Msg creation body",
+            "type": "object",
+            "required": [
+                "text",
+                "timestamp"
+            ],
+            "properties": {
+                "text": {
+                    "type": "string",
+                    "example": "Hey friend, remind me to call a friend tomorrow"
+                },
+                "timestamp": {
+                    "type": "string",
+                    "example": "2023-12-25T09:00:00Z"
+                }
+            }
+        },
+        "types.Memory": {
+            "type": "object",
+            "properties": {
+                "conversation_id": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "description": "Embeddings\nEmbeddingRef any       ` + "`" + `json:\"embedding_ref\"` + "`" + `",
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string",
+                    "example": ""
+                },
+                "memory_type": {
+                    "$ref": "#/definitions/types.MemoryType"
+                },
+                "saliency_score": {
+                    "description": "Ever growing saliency score MRU",
+                    "type": "integer"
+                },
+                "string": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "types.MemoryType": {
+            "type": "string",
+            "enum": [
+                "episodic",
+                "semantic"
+            ],
+            "x-enum-varnames": [
+                "EPISODIC",
+                "SEMANTIC"
+            ]
+        },
+        "types.Message": {
+            "type": "object",
+            "properties": {
+                "conversation_id": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "msg_role": {
+                    "$ref": "#/definitions/assistant.Role"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "text": {
+                    "type": "string"
+                },
+                "timestamp": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
                 }
             }
         },

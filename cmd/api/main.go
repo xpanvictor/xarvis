@@ -59,9 +59,10 @@ func main() {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
 	database.MigrateDB(db)
+	rc, _ := database.NewRedis(cfg.RedisDB)
 
 	// Create application with all dependencies
-	application, err := app.NewApp(cfg, logger, db)
+	application, err := app.NewApp(cfg, logger, db, rc)
 	if err != nil {
 		log.Fatalf("Failed to initialize application: %v", err)
 	}

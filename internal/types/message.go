@@ -21,6 +21,25 @@ type Message struct {
 	MsgRole        assistant.Role `json:"msg_role"`
 }
 
+// CreateMessage data to crt msg
+// @Description Msg creation body
+type CreateMessage struct {
+	Text      string    `json:"text" binding:"required" example:"Hey friend, remind me to call a friend tomorrow"`
+	Timestamp time.Time `json:"timestamp" binding:"required" example:"2023-12-25T09:00:00Z"`
+}
+
+func (cm *CreateMessage) ToMessage(userID uuid.UUID) Message {
+	return Message{
+		Id:     uuid.New(),
+		UserId: userID,
+		// ConversationID: conversationID,
+		Text:      cm.Text,
+		Tags:      []string{"user req"},
+		Timestamp: cm.Timestamp,
+		MsgRole:   assistant.Role(adapters.USER),
+	}
+}
+
 type MemoryType string
 
 const (

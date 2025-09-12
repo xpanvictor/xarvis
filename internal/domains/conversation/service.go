@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"time"
 
 	"github.com/google/uuid"
@@ -11,6 +12,8 @@ import (
 	"github.com/xpanvictor/xarvis/internal/runtime/brain"
 	"github.com/xpanvictor/xarvis/internal/types"
 	"github.com/xpanvictor/xarvis/pkg/Logger"
+	"github.com/xpanvictor/xarvis/pkg/assistant/router"
+	"github.com/xpanvictor/xarvis/pkg/io/registry"
 )
 
 var (
@@ -81,6 +84,17 @@ func (c *conversationService) RetrieveConversation(ctx context.Context, userID u
 	return c.repository.RetrieveUserConversation(ctx, userID, &csr)
 }
 
-func New(cfg config.Settings) ConversationService {
-	return &conversationService{}
+func New(cfg config.Settings, gm *router.Mux,
+	dr registry.DeviceRegistry,
+	logger *Logger.Logger,
+	repo ConversationRepository,
+) ConversationService {
+	piperURL, err := url.Parse(cfg.Voice.TTSURL)
+	if err != nil {
+		panic(err.Error())
+	}
+	return &conversationService{
+		bs:         *brain.NewBrainSystem(cfg.BrainConfig, gm, dr, piperURL, logger),
+		repository: repo,
+	}
 }

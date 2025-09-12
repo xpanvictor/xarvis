@@ -16,6 +16,12 @@ type DBConfig struct {
 	Name     string `mapstructure:"name"`
 	PoolSize int    `mapstructure:"pool_size"`
 	TLS      bool   `mapstructure:"tls"`
+	RedisUrl string `mapstructure:"redis_url"`
+}
+
+type RedisConfig struct {
+	Addr string `mapstructure:"redis_addr"`
+	Pass string `mapstructure:"redis_pwd"`
 }
 
 func (d DBConfig) DSN() string {
@@ -75,6 +81,7 @@ type AuthConfig struct {
 
 type Settings struct {
 	DB            DBConfig         `mapstructure:"database"`
+	RedisDB       RedisConfig      `mapstructure:"redis"`
 	AssistantKeys AssistantKeysObj `mapstructure:"assistantKeys"`
 	Env           string           `mapstructure:"env"`
 	Debug         bool             `mapstructure:"debug" default:"false"`

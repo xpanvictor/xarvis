@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"github.com/xpanvictor/xarvis/internal/domains/user"
+	"github.com/xpanvictor/xarvis/internal/types"
 )
 
 // Response wrapper types for Swagger documentation
@@ -73,4 +74,13 @@ type UserByIDResponse struct {
 // RefreshTokenRequest represents the request body for token refresh
 type RefreshTokenRequest struct {
 	RefreshToken string `json:"refreshToken" binding:"required" example:"jwt-refresh-token-here"`
+}
+
+type MessageResponse struct {
+	Message types.Message `json:"message"`
+}
+
+// ConversationResponse represents the response for getting conversation
+type ConversationResponse struct {
+	Conversation types.Conversation `json:"conversation"`
 }

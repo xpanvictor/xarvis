@@ -20,7 +20,7 @@ help:
 .PHONY: up down restart logs proxy voice ai qdrant tidb docs clean ui_prod
 
 up:
-	$(DOCKER_COMPOSE) --profile proxy --profile client up -d --build mosquitto xarvis-core xarvis-client
+	$(DOCKER_COMPOSE) --profile proxy --profile client up -d --build redis mosquitto xarvis-core xarvis-client
 
 down:
 	$(DOCKER_COMPOSE) down

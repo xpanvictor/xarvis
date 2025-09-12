@@ -105,7 +105,8 @@ type Dependencies struct {
 	Logger         *Logger.Logger
 	Configs        *config.Settings
 	// User management dependencies
-	UserService user.UserService
+	UserService         user.UserService
+	ConversationService conversation.ConversationService
 }
 
 // UserBrainSystem tracks brain systems per user/session
@@ -130,7 +131,6 @@ func NewServerDependencies(
 	brainConfig config.BrainConfig,
 	logger *Logger.Logger,
 	config *config.Settings,
-	userService user.UserService,
 ) Dependencies {
 	return Dependencies{
 		conversationRepository: conversationRepository,
@@ -139,7 +139,6 @@ func NewServerDependencies(
 		BrainConfig:            brainConfig,
 		Configs:                config,
 		Logger:                 logger,
-		UserService:            userService,
 	}
 }
 
@@ -173,6 +172,10 @@ func InitializeRoutes(cfg *config.Settings, r *gin.Engine, dep Dependencies) {
 	// User management routes
 	userHandler := handlers.NewUserHandler(dep.UserService, dep.Logger)
 	userHandler.RegisterUserRoutes(v1)
+
+	// Conversation management routes
+	conversationHandler := handlers.NewConvoHandler(dep.ConversationService, dep.Logger)
+	conversationHandler.RegisterConversationRoutes(v1, dep.UserService)
 
 	// Create routes manager with new brain system architecture
 	rm := NewRoutesManager(dep)
@@ -337,8 +340,6 @@ func (rm *RoutesManager) processTextInput(userConn *UserConnection, text string)
 		MsgRole:   assistant.USER,
 		Tags:      []string{"websocket", "text"},
 	}
-
-	rm.deps.Logger.Infof("Processing text message for user %s: %s", userConn.UserID, text)
 
 	// Process through brain system
 	go func() {
@@ -640,10 +641,9 @@ func (rm *RoutesManager) createBrainSystem(userID, sessionID uuid.UUID) *brain.B
 		rm.deps.Mux,
 		rm.deps.DeviceRegistry,
 		piperURL,
-		*rm.deps.Logger,
+		rm.deps.Logger,
 	)
 
-	rm.deps.Logger.Infof("created new brain system for user %s", userID)
 	return brainSys
 }
 

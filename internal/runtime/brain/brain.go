@@ -21,7 +21,7 @@ type Brain struct {
 	cfg          config.BrainConfig
 	registry     toolsystem.Registry
 	executor     toolsystem.Executor
-	logger       Logger.Logger
+	logger       *Logger.Logger
 	mux          router.Mux // LLM router/multiplexer
 	defaultModel string     // Default model name to use for requests
 	// memory
@@ -288,7 +288,7 @@ func NewBrain(
 	registry toolsystem.Registry,
 	executor toolsystem.Executor,
 	mux router.Mux,
-	logger Logger.Logger,
+	logger *Logger.Logger,
 	defaultModel string,
 ) *Brain {
 	return &Brain{
