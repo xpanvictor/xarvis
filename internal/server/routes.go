@@ -14,6 +14,8 @@ import (
 	ginSwagger "github.com/swaggo/gin-swagger"
 	"github.com/xpanvictor/xarvis/internal/config"
 	"github.com/xpanvictor/xarvis/internal/domains/conversation"
+	"github.com/xpanvictor/xarvis/internal/domains/note"
+	"github.com/xpanvictor/xarvis/internal/domains/project"
 	"github.com/xpanvictor/xarvis/internal/domains/sys_manager/pipeline"
 	"github.com/xpanvictor/xarvis/internal/domains/user"
 	"github.com/xpanvictor/xarvis/internal/handlers"
@@ -44,6 +46,9 @@ type Dependencies struct {
 	// User management dependencies
 	UserService         user.UserService
 	ConversationService conversation.ConversationService
+	// Project and Note management dependencies
+	ProjectService project.ProjectService
+	NoteService    note.NoteService
 }
 
 // NewServerDependencies creates dependencies for server initialization
@@ -88,6 +93,16 @@ func InitializeRoutes(cfg *config.Settings, r *gin.Engine, dep Dependencies) {
 	// Conversation management routes
 	conversationHandler := handlers.NewConvoHandler(dep.ConversationService, dep.Logger)
 	conversationHandler.RegisterConversationRoutes(v1, dep.UserService)
+
+	// Project management routes
+	projectHandler := handlers.NewProjectHandler(dep.ProjectService, dep.Logger)
+
+	// Note management routes
+	noteHandler := handlers.NewNoteHandler(dep.NoteService, dep.Logger)
+	noteHandler.RegisterNoteRoutes(v1, dep.UserService)
+
+	// Register project routes with note handler for project-note endpoints
+	projectHandler.RegisterProjectRoutes(v1, dep.UserService, noteHandler)
 
 	// WebSocket handler using new structured system
 	wsHandler := wshandler.NewWebSocketHandler(

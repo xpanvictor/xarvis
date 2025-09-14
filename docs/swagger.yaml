@@ -17,6 +17,22 @@ definitions:
       conversation:
         $ref: '#/definitions/types.Conversation'
     type: object
+  handlers.CreateNoteResponse:
+    properties:
+      message:
+        example: Note created successfully
+        type: string
+      note:
+        $ref: '#/definitions/note.NoteResponse'
+    type: object
+  handlers.CreateProjectResponse:
+    properties:
+      message:
+        example: Project created successfully
+        type: string
+      project:
+        $ref: '#/definitions/project.ProjectResponse'
+    type: object
   handlers.DeleteAccountResponse:
     properties:
       message:
@@ -31,6 +47,24 @@ definitions:
       error:
         example: Something went wrong
         type: string
+    type: object
+  handlers.ListNotesResponse:
+    properties:
+      notes:
+        items:
+          $ref: '#/definitions/note.NoteResponse'
+        type: array
+      pagination:
+        $ref: '#/definitions/handlers.PaginationInfo'
+    type: object
+  handlers.ListProjectsResponse:
+    properties:
+      pagination:
+        $ref: '#/definitions/handlers.PaginationInfo'
+      projects:
+        items:
+          $ref: '#/definitions/project.ProjectResponse'
+        type: array
     type: object
   handlers.ListUsersResponse:
     properties:
@@ -61,6 +95,11 @@ definitions:
       message:
         $ref: '#/definitions/types.Message'
     type: object
+  handlers.NoteResponse:
+    properties:
+      note:
+        $ref: '#/definitions/note.NoteResponse'
+    type: object
   handlers.PaginationInfo:
     properties:
       limit:
@@ -77,6 +116,11 @@ definitions:
     properties:
       user:
         $ref: '#/definitions/user.UserResponse'
+    type: object
+  handlers.ProjectResponse:
+    properties:
+      project:
+        $ref: '#/definitions/project.ProjectResponse'
     type: object
   handlers.RefreshTokenRequest:
     properties:
@@ -102,6 +146,35 @@ definitions:
       user:
         $ref: '#/definitions/user.UserResponse'
     type: object
+  handlers.SearchNotesResponse:
+    properties:
+      notes:
+        items:
+          $ref: '#/definitions/note.NoteResponse'
+        type: array
+      pagination:
+        $ref: '#/definitions/handlers.PaginationInfo'
+      query:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+    type: object
+  handlers.SuccessResponse:
+    properties:
+      message:
+        example: Operation completed successfully
+        type: string
+    type: object
+  handlers.UpdateNoteResponse:
+    properties:
+      message:
+        example: Note updated successfully
+        type: string
+      note:
+        $ref: '#/definitions/note.NoteResponse'
+    type: object
   handlers.UpdateProfileResponse:
     properties:
       message:
@@ -110,10 +183,279 @@ definitions:
       user:
         $ref: '#/definitions/user.UserResponse'
     type: object
+  handlers.UpdateProjectResponse:
+    properties:
+      message:
+        example: Project updated successfully
+        type: string
+      project:
+        $ref: '#/definitions/project.ProjectResponse'
+    type: object
+  handlers.UpdateProjectStatusRequest:
+    properties:
+      status:
+        allOf:
+        - $ref: '#/definitions/project.ProjectStatus'
+        example: in_progress
+    required:
+    - status
+    type: object
   handlers.UserByIDResponse:
     properties:
       user:
         $ref: '#/definitions/user.UserResponse'
+    type: object
+  note.CreateNoteRequest:
+    description: Request body for note creation
+    properties:
+      content:
+        example: Important reminder about project deadline
+        minLength: 1
+        type: string
+      projectId:
+        description: 'Optional: for project logs'
+        example: 550e8400-e29b-41d4-a716-446655440002
+        type: string
+      tags:
+        example:
+        - reminder
+        - deadline
+        items:
+          type: string
+        type: array
+    required:
+    - content
+    type: object
+  note.NoteResponse:
+    description: Note information returned in API responses
+    properties:
+      content:
+        example: Important reminder about project deadline
+        type: string
+      createdAt:
+        example: "2023-01-01T12:00:00Z"
+        type: string
+      id:
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+      projectId:
+        example: 550e8400-e29b-41d4-a716-446655440002
+        type: string
+      tags:
+        example:
+        - reminder
+        - deadline
+        - important
+        items:
+          type: string
+        type: array
+      userId:
+        example: 550e8400-e29b-41d4-a716-446655440001
+        type: string
+    type: object
+  note.UpdateNoteRequest:
+    description: Request body for updating note
+    properties:
+      content:
+        example: Updated note content
+        minLength: 1
+        type: string
+      projectId:
+        description: 'Optional: for project logs'
+        example: 550e8400-e29b-41d4-a716-446655440002
+        type: string
+      tags:
+        example:
+        - reminder
+        - updated
+        items:
+          type: string
+        type: array
+    type: object
+  project.AddProgressEventRequest:
+    description: Request body for adding progress event
+    properties:
+      by:
+        example: user
+        type: string
+      kind:
+        allOf:
+        - $ref: '#/definitions/project.ProgressEventKind'
+        example: started
+      memo:
+        example: Started working on wireframes
+        type: string
+    required:
+    - by
+    - kind
+    type: object
+  project.CreateProjectRequest:
+    description: Request body for project creation
+    properties:
+      description:
+        example: Complete redesign of company website
+        type: string
+      dueAt:
+        example: "2023-12-31T23:59:59Z"
+        type: string
+      name:
+        example: Website Redesign
+        maxLength: 255
+        minLength: 1
+        type: string
+      priority:
+        allOf:
+        - $ref: '#/definitions/project.ProjectPriority'
+        example: med
+      status:
+        allOf:
+        - $ref: '#/definitions/project.ProjectStatus'
+        example: planned
+      tags:
+        example:
+        - web
+        - design
+        items:
+          type: string
+        type: array
+    required:
+    - name
+    type: object
+  project.ProgressEvent:
+    description: Progress event tracking project changes
+    properties:
+      at:
+        example: "2023-01-01T12:00:00Z"
+        type: string
+      by:
+        description: system/assistant/user
+        example: user
+        type: string
+      kind:
+        allOf:
+        - $ref: '#/definitions/project.ProgressEventKind'
+        example: started
+      memo:
+        example: Started working on initial setup
+        type: string
+    type: object
+  project.ProgressEventKind:
+    enum:
+    - planned
+    - started
+    - blocked
+    - unblocked
+    - completed
+    - comment
+    type: string
+    x-enum-varnames:
+    - EventPlanned
+    - EventStarted
+    - EventBlocked
+    - EventUnblocked
+    - EventCompleted
+    - EventComment
+  project.ProjectPriority:
+    enum:
+    - low
+    - med
+    - high
+    - urgent
+    type: string
+    x-enum-varnames:
+    - PriorityLow
+    - PriorityMed
+    - PriorityHigh
+    - PriorityUrgent
+  project.ProjectResponse:
+    description: Project information returned in API responses
+    properties:
+      createdAt:
+        example: "2023-01-01T12:00:00Z"
+        type: string
+      description:
+        example: Complete redesign of company website
+        type: string
+      dueAt:
+        example: "2023-12-31T23:59:59Z"
+        type: string
+      id:
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+      name:
+        example: Website Redesign
+        type: string
+      priority:
+        allOf:
+        - $ref: '#/definitions/project.ProjectPriority'
+        example: high
+      progress:
+        items:
+          $ref: '#/definitions/project.ProgressEvent'
+        type: array
+      status:
+        allOf:
+        - $ref: '#/definitions/project.ProjectStatus'
+        example: in_progress
+      tags:
+        example:
+        - web
+        - design
+        - frontend
+        items:
+          type: string
+        type: array
+      updatedAt:
+        example: "2023-01-01T12:00:00Z"
+        type: string
+      userId:
+        example: 550e8400-e29b-41d4-a716-446655440001
+        type: string
+    type: object
+  project.ProjectStatus:
+    enum:
+    - planned
+    - in_progress
+    - blocked
+    - done
+    - archived
+    type: string
+    x-enum-varnames:
+    - StatusPlanned
+    - StatusInProgress
+    - StatusBlocked
+    - StatusDone
+    - StatusArchived
+  project.UpdateProjectRequest:
+    description: Request body for updating project
+    properties:
+      description:
+        example: Updated description
+        type: string
+      dueAt:
+        example: "2023-12-31T23:59:59Z"
+        type: string
+      name:
+        example: Website Redesign v2
+        maxLength: 255
+        minLength: 1
+        type: string
+      priority:
+        allOf:
+        - $ref: '#/definitions/project.ProjectPriority'
+        example: high
+      status:
+        allOf:
+        - $ref: '#/definitions/project.ProjectStatus'
+        example: in_progress
+      tags:
+        example:
+        - web
+        - design
+        - urgent
+        items:
+          type: string
+        type: array
     type: object
   types.Conversation:
     properties:
@@ -339,6 +681,131 @@ info:
   title: Xarvis API
   version: "1.0"
 paths:
+  /admin/notes:
+    get:
+      consumes:
+      - application/json
+      description: List all notes in the system with optional filtering (admin only)
+      parameters:
+      - description: Search in note content
+        in: query
+        name: search
+        type: string
+      - description: Filter by tags (comma-separated)
+        in: query
+        name: tags
+        type: string
+      - default: created_at
+        description: Order by field (created_at, content)
+        in: query
+        name: orderBy
+        type: string
+      - default: desc
+        description: Order direction (asc, desc)
+        in: query
+        name: order
+        type: string
+      - default: 0
+        description: Number of notes to skip
+        in: query
+        name: offset
+        type: integer
+      - default: 20
+        description: Number of notes to return
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of notes with pagination
+          schema:
+            $ref: '#/definitions/handlers.ListNotesResponse'
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "403":
+          description: Admin access required
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List all notes (Admin)
+      tags:
+      - Admin
+  /admin/projects:
+    get:
+      consumes:
+      - application/json
+      description: List all projects in the system with optional filtering (admin
+        only)
+      parameters:
+      - description: Filter by status
+        enum:
+        - planned
+        - in_progress
+        - blocked
+        - done
+        - archived
+        in: query
+        name: status
+        type: string
+      - description: Filter by priority
+        enum:
+        - low
+        - med
+        - high
+        - urgent
+        in: query
+        name: priority
+        type: string
+      - collectionFormat: csv
+        description: Filter by tags (comma-separated)
+        in: query
+        items:
+          type: string
+        name: tags
+        type: array
+      - default: 0
+        description: Number of projects to skip
+        in: query
+        name: offset
+        type: integer
+      - default: 20
+        description: Number of projects to return
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of projects with pagination
+          schema:
+            $ref: '#/definitions/handlers.ListProjectsResponse'
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "403":
+          description: Admin access required
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List all projects (Admin)
+      tags:
+      - Admin
   /admin/users:
     get:
       consumes:
@@ -623,6 +1090,735 @@ paths:
       summary: Process user message and generate AI response
       tags:
       - Conversation
+  /notes:
+    get:
+      consumes:
+      - application/json
+      description: List all notes for the authenticated user with optional filtering
+      parameters:
+      - description: Search in note content
+        in: query
+        name: search
+        type: string
+      - description: Filter by tags (comma-separated)
+        in: query
+        name: tags
+        type: string
+      - default: created_at
+        description: Order by field (created_at, content)
+        in: query
+        name: orderBy
+        type: string
+      - default: desc
+        description: Order direction (asc, desc)
+        in: query
+        name: order
+        type: string
+      - default: 0
+        description: Number of notes to skip
+        in: query
+        name: offset
+        type: integer
+      - default: 20
+        description: Number of notes to return
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of notes with pagination
+          schema:
+            $ref: '#/definitions/handlers.ListNotesResponse'
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List user notes
+      tags:
+      - Notes
+    post:
+      consumes:
+      - application/json
+      description: Create a new note for the authenticated user
+      parameters:
+      - description: Note creation data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/note.CreateNoteRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Note created successfully
+          schema:
+            $ref: '#/definitions/handlers.CreateNoteResponse'
+        "400":
+          description: Invalid request data
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a new note
+      tags:
+      - Notes
+  /notes/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete a specific note (user can only delete their own notes)
+      parameters:
+      - description: Note ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Note deleted successfully
+          schema:
+            $ref: '#/definitions/handlers.SuccessResponse'
+        "400":
+          description: Invalid note ID
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "403":
+          description: Unauthorized access
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "404":
+          description: Note not found
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete note
+      tags:
+      - Notes
+    get:
+      consumes:
+      - application/json
+      description: Get a specific note by ID (user can only access their own notes)
+      parameters:
+      - description: Note ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Note data
+          schema:
+            $ref: '#/definitions/handlers.NoteResponse'
+        "400":
+          description: Invalid note ID
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "403":
+          description: Unauthorized access
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "404":
+          description: Note not found
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get note by ID
+      tags:
+      - Notes
+    put:
+      consumes:
+      - application/json
+      description: Update a specific note (user can only update their own notes)
+      parameters:
+      - description: Note ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Note update data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/note.UpdateNoteRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Note updated successfully
+          schema:
+            $ref: '#/definitions/handlers.UpdateNoteResponse'
+        "400":
+          description: Invalid request data
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "403":
+          description: Unauthorized access
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "404":
+          description: Note not found
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update note
+      tags:
+      - Notes
+  /notes/search:
+    get:
+      consumes:
+      - application/json
+      description: Search notes by content and/or tags for the authenticated user
+      parameters:
+      - description: Search query
+        in: query
+        name: q
+        required: true
+        type: string
+      - description: Filter by tags (comma-separated)
+        in: query
+        name: tags
+        type: string
+      - default: 0
+        description: Number of notes to skip
+        in: query
+        name: offset
+        type: integer
+      - default: 20
+        description: Number of notes to return
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Search results with pagination
+          schema:
+            $ref: '#/definitions/handlers.SearchNotesResponse'
+        "400":
+          description: Search query is required
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Search notes
+      tags:
+      - Notes
+  /notes/tags:
+    get:
+      consumes:
+      - application/json
+      description: Get notes filtered by specific tags for the authenticated user
+      parameters:
+      - description: Tags to filter by (comma-separated)
+        in: query
+        name: tags
+        required: true
+        type: string
+      - default: 0
+        description: Number of notes to skip
+        in: query
+        name: offset
+        type: integer
+      - default: 20
+        description: Number of notes to return
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of notes with pagination
+          schema:
+            $ref: '#/definitions/handlers.ListNotesResponse'
+        "400":
+          description: Tags parameter is required
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get notes by tags
+      tags:
+      - Notes
+  /projects:
+    get:
+      consumes:
+      - application/json
+      description: List all projects for the authenticated user with optional filtering
+      parameters:
+      - description: Filter by status
+        enum:
+        - planned
+        - in_progress
+        - blocked
+        - done
+        - archived
+        in: query
+        name: status
+        type: string
+      - description: Filter by priority
+        enum:
+        - low
+        - med
+        - high
+        - urgent
+        in: query
+        name: priority
+        type: string
+      - collectionFormat: csv
+        description: Filter by tags (comma-separated)
+        in: query
+        items:
+          type: string
+        name: tags
+        type: array
+      - default: 0
+        description: Number of projects to skip
+        in: query
+        name: offset
+        type: integer
+      - default: 20
+        description: Number of projects to return
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of projects with pagination
+          schema:
+            $ref: '#/definitions/handlers.ListProjectsResponse'
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List user projects
+      tags:
+      - Projects
+    post:
+      consumes:
+      - application/json
+      description: Create a new project for the authenticated user
+      parameters:
+      - description: Project creation data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/project.CreateProjectRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Project created successfully
+          schema:
+            $ref: '#/definitions/handlers.CreateProjectResponse'
+        "400":
+          description: Invalid request data
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a new project
+      tags:
+      - Projects
+  /projects/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete a specific project (user can only delete their own projects)
+      parameters:
+      - description: Project ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Project deleted successfully
+          schema:
+            $ref: '#/definitions/handlers.SuccessResponse'
+        "400":
+          description: Invalid project ID
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "403":
+          description: Unauthorized access
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "404":
+          description: Project not found
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete project
+      tags:
+      - Projects
+    get:
+      consumes:
+      - application/json
+      description: Get a specific project by ID (user can only access their own projects)
+      parameters:
+      - description: Project ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Project data
+          schema:
+            $ref: '#/definitions/handlers.ProjectResponse'
+        "400":
+          description: Invalid project ID
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "403":
+          description: Unauthorized access
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "404":
+          description: Project not found
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get project by ID
+      tags:
+      - Projects
+    put:
+      consumes:
+      - application/json
+      description: Update a specific project (user can only update their own projects)
+      parameters:
+      - description: Project ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Project update data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/project.UpdateProjectRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Project updated successfully
+          schema:
+            $ref: '#/definitions/handlers.UpdateProjectResponse'
+        "400":
+          description: Invalid request data
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "403":
+          description: Unauthorized access
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "404":
+          description: Project not found
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update project
+      tags:
+      - Projects
+  /projects/{id}/progress:
+    post:
+      consumes:
+      - application/json
+      description: Add a progress event to a specific project
+      parameters:
+      - description: Project ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Progress event data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/project.AddProgressEventRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Progress event added successfully
+          schema:
+            $ref: '#/definitions/handlers.UpdateProjectResponse'
+        "400":
+          description: Invalid request data
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "403":
+          description: Unauthorized access
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "404":
+          description: Project not found
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Add progress event
+      tags:
+      - Projects
+  /projects/{id}/status:
+    put:
+      consumes:
+      - application/json
+      description: Update the status of a specific project
+      parameters:
+      - description: Project ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Status update data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.UpdateProjectStatusRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Project status updated successfully
+          schema:
+            $ref: '#/definitions/handlers.UpdateProjectResponse'
+        "400":
+          description: Invalid request data
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "403":
+          description: Unauthorized access
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "404":
+          description: Project not found
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update project status
+      tags:
+      - Projects
+  /projects/{projectId}/notes:
+    get:
+      consumes:
+      - application/json
+      description: Get all notes/logs for a specific project
+      parameters:
+      - description: Project ID
+        in: path
+        name: projectId
+        required: true
+        type: string
+      - default: 0
+        description: Number of notes to skip
+        in: query
+        name: offset
+        type: integer
+      - default: 20
+        description: Number of notes to return
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of project notes/logs with pagination
+          schema:
+            $ref: '#/definitions/handlers.ListNotesResponse'
+        "400":
+          description: Invalid project ID
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get project notes/logs
+      tags:
+      - Projects
+    post:
+      consumes:
+      - application/json
+      description: Create a new note/log entry for a specific project
+      parameters:
+      - description: Project ID
+        in: path
+        name: projectId
+        required: true
+        type: string
+      - description: Note creation data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/note.CreateNoteRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Project note created successfully
+          schema:
+            $ref: '#/definitions/handlers.CreateNoteResponse'
+        "400":
+          description: Invalid request data
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create project note/log
+      tags:
+      - Projects
   /user/account:
     delete:
       consumes:

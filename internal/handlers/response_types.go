@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"github.com/xpanvictor/xarvis/internal/domains/note"
+	"github.com/xpanvictor/xarvis/internal/domains/project"
 	"github.com/xpanvictor/xarvis/internal/domains/user"
 	"github.com/xpanvictor/xarvis/internal/types"
 )
@@ -88,4 +90,67 @@ type MemoryResponse struct {
 // ConversationResponse represents the response for getting conversation
 type ConversationResponse struct {
 	Conversation types.Conversation `json:"conversation"`
+}
+
+// Project-related responses
+
+// CreateProjectResponse represents the response for project creation
+type CreateProjectResponse struct {
+	Message string                  `json:"message" example:"Project created successfully"`
+	Project project.ProjectResponse `json:"project"`
+}
+
+// ProjectResponse represents the response for getting a single project
+type ProjectResponse struct {
+	Project project.ProjectResponse `json:"project"`
+}
+
+// UpdateProjectResponse represents the response for updating a project
+type UpdateProjectResponse struct {
+	Message string                  `json:"message" example:"Project updated successfully"`
+	Project project.ProjectResponse `json:"project"`
+}
+
+// ListProjectsResponse represents the response for listing projects
+type ListProjectsResponse struct {
+	Projects   []project.ProjectResponse `json:"projects"`
+	Pagination PaginationInfo            `json:"pagination"`
+}
+
+// UpdateProjectStatusRequest represents the request for updating project status
+type UpdateProjectStatusRequest struct {
+	Status project.ProjectStatus `json:"status" binding:"required" example:"in_progress"`
+}
+
+// Note-related responses
+
+// CreateNoteResponse represents the response for note creation
+type CreateNoteResponse struct {
+	Message string            `json:"message" example:"Note created successfully"`
+	Note    note.NoteResponse `json:"note"`
+}
+
+// NoteResponse represents the response for getting a single note
+type NoteResponse struct {
+	Note note.NoteResponse `json:"note"`
+}
+
+// UpdateNoteResponse represents the response for updating a note
+type UpdateNoteResponse struct {
+	Message string            `json:"message" example:"Note updated successfully"`
+	Note    note.NoteResponse `json:"note"`
+}
+
+// ListNotesResponse represents the response for listing notes
+type ListNotesResponse struct {
+	Notes      []note.NoteResponse `json:"notes"`
+	Pagination PaginationInfo      `json:"pagination"`
+}
+
+// SearchNotesResponse represents the response for searching notes
+type SearchNotesResponse struct {
+	Notes      []note.NoteResponse `json:"notes"`
+	Pagination PaginationInfo      `json:"pagination"`
+	Query      string              `json:"query,omitempty"`
+	Tags       []string            `json:"tags,omitempty"`
 }

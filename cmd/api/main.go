@@ -59,7 +59,7 @@ func main() {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
 	// todo: bring back; tmp paused for quick dev
-	// database.MigrateDB(db)
+	database.MigrateDB(db)
 	rc, _ := database.NewRedis(cfg.RedisDB)
 
 	// Create application with all dependencies

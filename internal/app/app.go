@@ -6,8 +6,12 @@ import (
 	"github.com/go-redis/redis"
 	"github.com/xpanvictor/xarvis/internal/config"
 	"github.com/xpanvictor/xarvis/internal/domains/conversation"
+	"github.com/xpanvictor/xarvis/internal/domains/note"
+	"github.com/xpanvictor/xarvis/internal/domains/project"
 	"github.com/xpanvictor/xarvis/internal/domains/user"
 	convoRepo "github.com/xpanvictor/xarvis/internal/repository/conversation"
+	noteRepo "github.com/xpanvictor/xarvis/internal/repository/note"
+	projectRepo "github.com/xpanvictor/xarvis/internal/repository/project"
 	userRepo "github.com/xpanvictor/xarvis/internal/repository/user"
 	"github.com/xpanvictor/xarvis/internal/runtime/embedding"
 	"github.com/xpanvictor/xarvis/internal/server"
@@ -30,6 +34,8 @@ type App struct {
 	// repos
 	ConversationRepo conversation.ConversationRepository
 	UserRepo         user.UserRepository
+	ProjectRepo      project.ProjectRepository
+	NoteRepo         note.NoteRepository
 	ServerDeps       server.Dependencies
 }
 
@@ -76,6 +82,8 @@ func (a *App) setupDependencies() error {
 	// 5. Set up repositories
 	a.ConversationRepo = convoRepo.NewGormConvoRepo(a.DB, a.RC, time.Duration(a.Config.BrainConfig.MsgTTLMins*int64(time.Minute)), a.Embedder)
 	a.UserRepo = userRepo.NewGormUserRepo(a.DB)
+	a.ProjectRepo = projectRepo.NewGormProjectRepo(a.DB)
+	a.NoteRepo = noteRepo.NewGormNoteRepo(a.DB)
 
 	// JWT settings from config
 	jwtSecret := a.Config.Auth.JWTSecret
@@ -92,6 +100,8 @@ func (a *App) setupDependencies() error {
 
 	// add services
 	deps.UserService = user.NewUserService(a.UserRepo, a.Logger, jwtSecret, tokenTTL)
+	deps.ProjectService = project.NewProjectService(a.ProjectRepo, a.Logger)
+	deps.NoteService = note.NewNoteService(a.NoteRepo, a.Logger)
 	deps.ConversationService = conversation.New(
 		*deps.Configs,
 		deps.Mux,
