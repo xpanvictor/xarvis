@@ -1,57 +1,262 @@
 import React, { useEffect, useState } from 'react';
 import { MemoryGraph } from '../components/memory/MemoryGraph';
 import { RecentMessages } from '../components/conversation/RecentMessages';
+import { StreamingMessage } from '../components/conversation/StreamingMessage';
+import { SimpleVoiceControl } from '../components/conversation/SimpleVoiceControl';
 import { useConversationStore, useUIStore } from '../store';
 import { conversationAPI } from '../services/api';
-import { Send, Mic, MicOff, Settings, Plus } from 'lucide-react';
+import webSocketService, { ConnectionState } from '../services/websocket';
+import audioService from '../services/audio';
+import pcmAudioPlayer from '../services/pcmAudioPlayer';
+import { Send, Settings, Plus, MessageSquare } from 'lucide-react';
 import './Dashboard.css';
 
 export const Dashboard: React.FC = () => {
-    const { conversation, setConversation, setLoading, setError } = useConversationStore();
+    const {
+        conversation,
+        setConversation,
+        setLoading,
+        setError,
+        isConnected,
+        connectionState,
+        listeningState,
+        setConnectionState,
+        streamingMessage,
+        startStreamingMessage,
+        updateStreamingContent,
+        completeStreamingMessage,
+        setStreamingAudio,
+        setStreamingPCMAudio,
+        clearStreamingMessage,
+        addMessage
+    } = useConversationStore();
     const { setSidebarOpen } = useUIStore();
     const [inputMessage, setInputMessage] = useState('');
-    const [isConnected, setIsConnected] = useState(false);
     const [inputMode, setInputMode] = useState<'text' | 'voice'>('text');
+    const [showVoiceControls, setShowVoiceControls] = useState(false);
 
-    // Load conversation data on mount
+    // Initialize services and load conversation
     useEffect(() => {
-        const loadConversation = async () => {
+        let mounted = true;
+
+        const initializeApp = async () => {
             try {
                 setLoading(true);
+
+                // Load conversation data
                 const conv = await conversationAPI.getConversation();
-                setConversation(conv);
+                if (mounted) {
+                    setConversation(conv);
+                }
+
+                // Initialize WebSocket connection (URL is resolved inside the service)
+                webSocketService.connect();
+
             } catch (error: any) {
-                setError(error.message);
-                console.error('Failed to load conversation:', error);
+                if (mounted) {
+                    setError(error.message);
+                    console.error('Failed to initialize app:', error);
+                }
             } finally {
-                setLoading(false);
+                if (mounted) {
+                    setLoading(false);
+                }
             }
         };
 
-        loadConversation();
+        initializeApp();
+
+        return () => {
+            mounted = false;
+            // Cleanup services on unmount
+            webSocketService.disconnect();
+            audioService.cleanup();
+            pcmAudioPlayer.cleanup();
+        };
     }, [setConversation, setLoading, setError]);
+
+    // Handle WebSocket events for streaming
+    useEffect(() => {
+        // Handle streaming text (existing)
+        const handleStreamingText = (content: string, isComplete: boolean) => {
+            console.log(`📝 handleStreamingText: content="${content}", isComplete=${isComplete}, hasExistingMessage=${!!streamingMessage}`);
+
+            // Only start streaming if we have actual content
+            if (!streamingMessage && content && content.trim()) {
+                console.log('🚀 Starting new streaming message');
+                startStreamingMessage();
+            }
+
+            if (content) {
+                updateStreamingContent(content);
+            }
+
+            if (isComplete) {
+                completeStreamingMessage();
+            }
+        };
+
+        // Handle streaming audio (existing)
+        const handleStreamingAudio = (audioBlob: Blob) => {
+            setStreamingAudio(audioBlob);
+        };
+
+        // Handle text deltas (like old_ci.tsx)
+        const handleTextDelta = (index: number, text: string) => {
+            console.log(`📝 Text delta: index=${index}, text="${text}", hasExistingMessage=${!!streamingMessage}`);
+
+            if (index === 1 || !streamingMessage) {
+                // Start of new message - clear any existing streaming message
+                console.log('🚀 Starting new message from text delta');
+                clearStreamingMessage();
+                startStreamingMessage();
+                updateStreamingContent(text);
+            } else {
+                // Continue streaming message - append text
+                const currentContent = streamingMessage?.content || '';
+                const newContent = currentContent + text;
+                console.log(`📝 Appending text: "${text}" to existing content: "${currentContent}" = "${newContent}"`);
+                updateStreamingContent(newContent);
+            }
+        };
+
+        // Handle events (like old_ci.tsx)
+        const handleEvent = (eventName: string, payload: any) => {
+            console.log(`Event: ${eventName}`, payload);
+
+            if (eventName === 'message_complete') {
+                // Mark streaming as complete
+                completeStreamingMessage();
+
+                // Also try to play audio if we have collected any (fallback)
+                setTimeout(() => {
+                    if (pcmAudioPlayer.getQueueLength() > 0) {
+                        console.log('🎵 Message complete - triggering audio playback as fallback');
+                        pcmAudioPlayer.playCollectedAudio();
+                    }
+                }, 100);
+            } else if (eventName === 'audio_format') {
+                // Store audio format info for PCM conversion
+                console.log('Audio format received:', payload);
+                pcmAudioPlayer.setAudioFormat(payload);
+            } else if (eventName === 'audio_complete') {
+                console.log('🎵 Audio streaming complete - playing collected audio');
+                // Play all collected audio at once
+                pcmAudioPlayer.playCollectedAudio();
+            }
+        };
+
+        // Handle PCM audio data - collect for later playback
+        const handlePCMAudio = (pcmData: ArrayBuffer) => {
+            console.log('Received PCM audio data:', pcmData.byteLength, 'bytes');
+            // Just collect the data, don't play yet
+            pcmAudioPlayer.addPCMChunk(pcmData);
+        };
+
+        // Handle response messages (from websocket response case)
+        const handleMessage = (responseData: any) => {
+            console.log('📨 Received message response:', responseData);
+
+            if ((responseData.type === 'text' || responseData.type === 'text_delta') && responseData.content) {
+                console.log('📝 Processing text response content:', responseData.content);
+
+                // Check if this is a new message or continuation
+                if (!streamingMessage) {
+                    console.log('🚀 Starting new streaming message from response');
+                    startStreamingMessage();
+                    updateStreamingContent(responseData.content);
+                } else {
+                    // For text_delta, append to existing content
+                    const currentContent = streamingMessage?.content || '';
+                    const newContent = currentContent + responseData.content;
+                    console.log(`📝 Appending text delta: "${responseData.content}" to existing: "${currentContent}" = "${newContent}"`);
+                    updateStreamingContent(newContent);
+                }
+
+                // Only mark as complete if explicitly indicated
+                if (responseData.isComplete === true) {
+                    console.log('✅ Message marked as complete from response');
+                    completeStreamingMessage();
+                }
+            }
+        };
+
+        // Register event handlers
+        webSocketService.on('onStreamingText', handleStreamingText);
+        webSocketService.on('onStreamingAudio', handleStreamingAudio);
+        webSocketService.on('onTextDelta', handleTextDelta);
+        webSocketService.on('onEvent', handleEvent);
+        webSocketService.on('onPCMAudio', handlePCMAudio);
+        webSocketService.on('onMessage', handleMessage);
+
+        // Cleanup
+        return () => {
+            webSocketService.off('onStreamingText');
+            webSocketService.off('onStreamingAudio');
+            webSocketService.off('onTextDelta');
+            webSocketService.off('onEvent');
+            webSocketService.off('onPCMAudio');
+            webSocketService.off('onMessage');
+        };
+    }, [streamingMessage, startStreamingMessage, updateStreamingContent, completeStreamingMessage, setStreamingAudio, clearStreamingMessage]);
+
+    // Handle WebSocket connection state changes
+    useEffect(() => {
+        const handleConnectionChange = (state: ConnectionState) => {
+            setConnectionState(state);
+        };
+
+        webSocketService.on('onConnectionStateChange', handleConnectionChange);
+
+        return () => {
+            // Clean up listeners when component unmounts
+            webSocketService.off('onConnectionStateChange');
+        };
+    }, [setConnectionState]);
 
     const handleSendMessage = async () => {
         if (!inputMessage.trim()) return;
 
         try {
-            await conversationAPI.sendMessage({
+            setLoading(true);
+            setError(null);
+
+            // Add user message to recent messages immediately
+            const userMessage = {
+                id: `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                conversation_id: conversation?.id || '',
+                user_id: conversation?.owner_id || '',
                 text: inputMessage,
+                msg_role: 'user' as const,
                 timestamp: new Date().toISOString(),
-            });
+                tags: ['user_input']
+            };
+
+            addMessage(userMessage);
+
+            if (inputMode === 'text' && isConnected) {
+                // Always use WebSocket for real-time streaming
+                clearStreamingMessage(); // Clear any previous streaming message
+                webSocketService.sendTextMessage(inputMessage);
+            } else {
+                // Fallback to API only if WebSocket is not connected
+                const response = await conversationAPI.sendMessage({
+                    text: inputMessage,
+                    timestamp: new Date().toISOString()
+                });
+
+                // Add the response message
+                addMessage(response);
+            }
 
             setInputMessage('');
-
-            // Reload conversation to get updated messages
-            const updatedConv = await conversationAPI.getConversation();
-            setConversation(updatedConv);
-        } catch (error: any) {
-            setError(error.message);
+        } catch (error) {
             console.error('Failed to send message:', error);
+            setError('Failed to send message. Please try again.');
+        } finally {
+            setLoading(false);
         }
-    };
-
-    const handleKeyPress = (e: React.KeyboardEvent) => {
+    }; const handleKeyPress = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             handleSendMessage();
@@ -102,6 +307,20 @@ export const Dashboard: React.FC = () => {
 
                 {/* Recent Messages Sidebar */}
                 <div className="messages-section">
+                    {/* Streaming Message Display */}
+                    {streamingMessage && (
+                        <StreamingMessage
+                            content={streamingMessage.content}
+                            isStreaming={streamingMessage.isStreaming}
+                            audioBlob={streamingMessage.audioBlob}
+                            pcmAudioData={streamingMessage.pcmAudioData}
+                            onComplete={() => {
+                                // Clear streaming message after completion
+                                setTimeout(() => clearStreamingMessage(), 2000);
+                            }}
+                        />
+                    )}
+
                     <RecentMessages />
                 </div>
             </div>
@@ -144,12 +363,8 @@ export const Dashboard: React.FC = () => {
                         </div>
                     ) : (
                         <div className="voice-input-area">
-                            <button className="voice-button">
-                                <Mic size={20} />
-                                <span>Tap to speak</span>
-                            </button>
-                            <div className="voice-status">
-                                Ready to listen
+                            <div className="voice-controls-container">
+                                <SimpleVoiceControl className="dashboard-voice-controls" />
                             </div>
                         </div>
                     )}
@@ -158,8 +373,28 @@ export const Dashboard: React.FC = () => {
                 <div className="connection-status">
                     <div className={`status-indicator ${isConnected ? 'connected' : 'disconnected'}`}>
                         <div className="status-dot"></div>
-                        <span>{isConnected ? 'Connected' : 'Disconnected'}</span>
+                        <span>{isConnected ? 'Connected' : connectionState}</span>
                     </div>
+
+                    {/* Debug button for testing audio */}
+                    <button
+                        onClick={() => {
+                            console.log('🔧 Debug: Manually triggering audio playback');
+                            console.log('🔧 Queue length:', pcmAudioPlayer.getQueueLength());
+                            console.log('🔧 Is playing:', pcmAudioPlayer.getIsPlaying());
+                            pcmAudioPlayer.playCollectedAudio();
+                        }}
+                        style={{ marginLeft: '10px', padding: '4px 8px', fontSize: '12px' }}
+                    >
+                        🔧 Play Audio
+                    </button>
+
+                    {listeningState !== 'idle' && (
+                        <div className="listening-indicator">
+                            <div className={`listening-dot ${listeningState}`}></div>
+                            <span className="listening-text">{listeningState}</span>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

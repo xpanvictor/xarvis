@@ -1,0 +1,256 @@
+/* Streaming Message Styles */
+.streaming-message {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(100, 255, 218, 0.2);
+    border-radius: 12px;
+    padding: 1rem;
+    margin: 1rem 0;
+    animation: slideInMessage 0.3s ease-out;
+}
+
+.message-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+.message-avatar {
+    width: 32px;
+    height: 32px;
+    background: linear-gradient(135deg, #64ffda 0%, #00acc1 100%);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #000;
+    flex-shrink: 0;
+}
+
+.message-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex: 1;
+}
+
+.message-role {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #64ffda;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.message-controls {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.audio-toggle {
+    background: rgba(100, 255, 218, 0.1);
+    border: 1px solid rgba(100, 255, 218, 0.3);
+    border-radius: 6px;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #64ffda;
+    transition: all 0.2s ease;
+}
+
+.audio-toggle:hover {
+    background: rgba(100, 255, 218, 0.2);
+    border-color: rgba(100, 255, 218, 0.5);
+    transform: scale(1.05);
+}
+
+.audio-toggle:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.audio-toggle.playing {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.3);
+    color: #ef4444;
+}
+
+.audio-toggle.playing:hover {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: rgba(239, 68, 68, 0.5);
+}
+
+.message-content {
+    max-height: 300px;
+    overflow-y: auto;
+    padding-right: 0.5rem;
+}
+
+.text-content {
+    font-size: 0.9rem;
+    line-height: 1.6;
+    color: #fff;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.typing-cursor {
+    display: inline-block;
+    width: 2px;
+    background: #64ffda;
+    animation: blink 1s infinite;
+    margin-left: 2px;
+}
+
+@keyframes blink {
+
+    0%,
+    50% {
+        opacity: 1;
+    }
+
+    51%,
+    100% {
+        opacity: 0;
+    }
+}
+
+.streaming-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.pulse-dots {
+    display: flex;
+    gap: 0.25rem;
+}
+
+.pulse-dots span {
+    width: 6px;
+    height: 6px;
+    background: #64ffda;
+    border-radius: 50%;
+    animation: pulse 1.4s infinite ease-in-out;
+}
+
+.pulse-dots span:nth-child(1) {
+    animation-delay: -0.32s;
+}
+
+.pulse-dots span:nth-child(2) {
+    animation-delay: -0.16s;
+}
+
+.pulse-dots span:nth-child(3) {
+    animation-delay: 0;
+}
+
+@keyframes pulse {
+
+    0%,
+    80%,
+    100% {
+        transform: scale(0.8);
+        opacity: 0.5;
+    }
+
+    40% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+/* Scrollbar styling for message content */
+.message-content::-webkit-scrollbar {
+    width: 4px;
+}
+
+.message-content::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 2px;
+}
+
+.message-content::-webkit-scrollbar-thumb {
+    background: rgba(100, 255, 218, 0.3);
+    border-radius: 2px;
+}
+
+.message-content::-webkit-scrollbar-thumb:hover {
+    background: rgba(100, 255, 218, 0.5);
+}
+
+/* Animation for new messages */
+@keyframes slideInMessage {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .streaming-message {
+        padding: 0.75rem;
+        margin: 0.75rem 0;
+    }
+
+    .message-avatar {
+        width: 28px;
+        height: 28px;
+    }
+
+    .text-content {
+        font-size: 0.875rem;
+    }
+
+    .audio-toggle {
+        width: 24px;
+        height: 24px;
+    }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    .streaming-message {
+        border-color: #64ffda;
+        background: rgba(0, 0, 0, 0.8);
+    }
+
+    .text-content {
+        color: #ffffff;
+    }
+
+    .typing-cursor {
+        background: #ffffff;
+    }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+    .streaming-message {
+        animation: none;
+    }
+
+    .typing-cursor {
+        animation: none;
+        opacity: 1;
+    }
+
+    .pulse-dots span {
+        animation: none;
+        opacity: 0.7;
+    }
+}

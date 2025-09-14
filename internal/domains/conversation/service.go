@@ -117,5 +117,6 @@ func New(cfg config.Settings, gm *router.Mux,
 	return &conversationService{
 		bs:         *brain.NewBrainSystem(cfg.BrainConfig, gm, dr, piperURL, logger),
 		repository: repo,
+		logger:     logger,
 	}
 }

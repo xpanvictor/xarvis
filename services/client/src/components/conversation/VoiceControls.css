@@ -1,0 +1,446 @@
+/* Voice Controls Styling */
+.voice-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1rem;
+    background: var(--background-secondary, #f8f9fa);
+    border-radius: 12px;
+    border: 1px solid var(--border-color, #e1e5e9);
+    max-width: 320px;
+    position: relative;
+}
+
+/* Connection Status */
+.connection-status {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.connection-icon.connected {
+    color: var(--success-color, #28a745);
+}
+
+.connection-icon.disconnected {
+    color: var(--error-color, #dc3545);
+}
+
+.status-text.connected {
+    color: var(--success-color, #28a745);
+}
+
+.status-text.connecting {
+    color: var(--warning-color, #ffc107);
+}
+
+.status-text.disconnected {
+    color: var(--error-color, #dc3545);
+}
+
+/* Listening Status */
+.listening-status {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.listening-icon.active {
+    color: var(--primary-color, #007bff);
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+.listening-icon.passive {
+    color: var(--info-color, #17a2b8);
+}
+
+.listening-icon.processing {
+    color: var(--warning-color, #ffc107);
+    animation: spin 1s linear infinite;
+}
+
+.listening-icon.idle {
+    color: var(--text-muted, #6c757d);
+}
+
+.listening-text.active {
+    color: var(--primary-color, #007bff);
+}
+
+.listening-text.passive {
+    color: var(--info-color, #17a2b8);
+}
+
+.listening-text.processing {
+    color: var(--warning-color, #ffc107);
+}
+
+.listening-text.idle {
+    color: var(--text-muted, #6c757d);
+}
+
+/* Audio Level Indicator */
+.audio-level {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    height: 40px;
+}
+
+.volume-bars {
+    display: flex;
+    align-items: end;
+    gap: 2px;
+    height: 100%;
+    width: 60px;
+}
+
+.volume-bar {
+    background: var(--text-muted, #6c757d);
+    width: 4px;
+    border-radius: 2px;
+    transition: all 0.1s ease;
+    min-height: 2px;
+}
+
+.volume-bar.active {
+    background: var(--primary-color, #007bff);
+}
+
+/* Recording Mode Toggle */
+.recording-mode {
+    display: flex;
+    gap: 0.25rem;
+    background: var(--background-tertiary, #f1f3f4);
+    border-radius: 6px;
+    padding: 0.25rem;
+}
+
+.mode-button {
+    flex: 1;
+    padding: 0.5rem 0.75rem;
+    border: none;
+    background: transparent;
+    border-radius: 4px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: var(--text-secondary, #495057);
+}
+
+.mode-button:hover {
+    background: var(--background-hover, #e9ecef);
+}
+
+.mode-button.active {
+    background: var(--primary-color, #007bff);
+    color: white;
+}
+
+/* Main Controls */
+.main-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.voice-button {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    border: 2px solid var(--border-color, #e1e5e9);
+    background: var(--background-primary, #ffffff);
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    flex: 1;
+    min-height: 48px;
+}
+
+.voice-button:hover:not(:disabled) {
+    border-color: var(--primary-color, #007bff);
+    background: var(--primary-light, #f8f9ff);
+}
+
+.voice-button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.voice-button.recording {
+    border-color: var(--error-color, #dc3545);
+    background: var(--error-light, #fff5f5);
+    color: var(--error-color, #dc3545);
+}
+
+.voice-button.push-to-talk.recording {
+    animation: pulse-red 1s ease-in-out infinite;
+}
+
+.voice-button svg.recording {
+    color: var(--error-color, #dc3545);
+    animation: pulse 1s ease-in-out infinite;
+}
+
+.button-text {
+    font-size: 0.875rem;
+}
+
+.mute-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    border: 2px solid var(--border-color, #e1e5e9);
+    background: var(--background-primary, #ffffff);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.mute-button:hover {
+    border-color: var(--warning-color, #ffc107);
+    background: var(--warning-light, #fff9e6);
+}
+
+.mute-button.muted {
+    border-color: var(--error-color, #dc3545);
+    background: var(--error-light, #fff5f5);
+    color: var(--error-color, #dc3545);
+}
+
+/* Active Controls */
+.active-controls {
+    display: flex;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    background: var(--background-tertiary, #f1f3f4);
+    border-radius: 8px;
+    border: 1px solid var(--border-color, #e1e5e9);
+}
+
+.control-button {
+    flex: 1;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border-color, #e1e5e9);
+    background: var(--background-primary, #ffffff);
+    border-radius: 6px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.control-button:hover:not(:disabled) {
+    background: var(--background-hover, #e9ecef);
+}
+
+.control-button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    background: var(--background-disabled, #f8f9fa);
+}
+
+.control-button.passive:not(:disabled) {
+    border-color: var(--info-color, #17a2b8);
+    color: var(--info-color, #17a2b8);
+}
+
+.control-button.active:not(:disabled) {
+    border-color: var(--primary-color, #007bff);
+    color: var(--primary-color, #007bff);
+}
+
+.control-button.stop {
+    border-color: var(--error-color, #dc3545);
+    color: var(--error-color, #dc3545);
+}
+
+.control-button.stop:hover:not(:disabled) {
+    background: var(--error-light, #fff5f5);
+}
+
+/* Settings Panel */
+.settings-panel {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    margin-top: 0.5rem;
+    padding: 1rem;
+    background: var(--background-primary, #ffffff);
+    border: 1px solid var(--border-color, #e1e5e9);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+}
+
+.settings-panel h4 {
+    margin: 0 0 1rem 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary, #212529);
+}
+
+.setting-group {
+    margin-bottom: 1rem;
+}
+
+.setting-group:last-child {
+    margin-bottom: 0;
+}
+
+.setting-group label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-secondary, #495057);
+    margin-bottom: 0.25rem;
+}
+
+.setting-group select {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid var(--border-color, #e1e5e9);
+    border-radius: 4px;
+    background: var(--background-primary, #ffffff);
+    font-size: 0.875rem;
+}
+
+.setting-group input[type="checkbox"] {
+    margin-right: 0.5rem;
+}
+
+/* Settings Toggle */
+.settings-toggle {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s ease;
+}
+
+.settings-toggle:hover {
+    background: var(--background-hover, #e9ecef);
+}
+
+/* Animations */
+@keyframes pulse {
+
+    0%,
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+
+    50% {
+        opacity: 0.7;
+        transform: scale(1.05);
+    }
+}
+
+@keyframes pulse-red {
+
+    0%,
+    100% {
+        border-color: var(--error-color, #dc3545);
+        box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7);
+    }
+
+    50% {
+        border-color: var(--error-color, #dc3545);
+        box-shadow: 0 0 0 4px rgba(220, 53, 69, 0.2);
+    }
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .voice-controls {
+        max-width: 100%;
+        padding: 0.75rem;
+    }
+
+    .main-controls {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .voice-button {
+        width: 100%;
+    }
+
+    .mute-button {
+        width: 100%;
+        height: 42px;
+    }
+
+    .active-controls {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .control-button {
+        width: 100%;
+    }
+
+    .settings-panel {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 90%;
+        max-width: 300px;
+        margin-top: 0;
+    }
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+    .voice-controls {
+        --background-primary: #2d3748;
+        --background-secondary: #1a202c;
+        --background-tertiary: #4a5568;
+        --background-hover: #4a5568;
+        --background-disabled: #2d3748;
+        --text-primary: #f7fafc;
+        --text-secondary: #e2e8f0;
+        --text-muted: #a0aec0;
+        --border-color: #4a5568;
+        --primary-color: #4299e1;
+        --primary-light: #2a4a6b;
+        --success-color: #48bb78;
+        --warning-color: #ed8936;
+        --warning-light: #7c4a00;
+        --error-color: #f56565;
+        --error-light: #7a2d2d;
+        --info-color: #38b2ac;
+    }
+}

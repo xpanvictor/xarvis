@@ -2,14 +2,15 @@ package gemini
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/google/generative-ai-go/genai"
 	"github.com/google/uuid"
 	"github.com/xpanvictor/xarvis/pkg/assistant/adapters"
 	"github.com/xpanvictor/xarvis/pkg/assistant/providers/gemini"
-	"github.com/xpanvictor/xarvis/pkg/assistant/router"
 )
 
 type geminiAdapter struct {
@@ -21,7 +22,7 @@ type geminiAdapter struct {
 func New(
 	provider *gemini.GeminiProvider,
 	cfg adapters.ContractLLMCfg,
-	_ *adapters.ContractResponseChannel, // deprecated, no longer used
+	_ *adapters.ContractResponseChannel, // deprecated
 ) adapters.ContractAdapter {
 	if cfg.DeltaTimeDuration == 0 {
 		cfg.DeltaTimeDuration = 150 * time.Millisecond
@@ -40,7 +41,7 @@ func (g *geminiAdapter) DrainBuffer(ch adapters.ContractResponseChannel) bool {
 	return false
 }
 
-// Process implements adapters.ContractAdapter.
+// Process streams deltas, then guarantees: (1) flusher stopped, (2) buffer drained, (3) Done sent, (4) channel closed once.
 func (g *geminiAdapter) Process(ctx context.Context, input adapters.ContractInput, rc *adapters.ContractResponseChannel) adapters.ContractResponse {
 	genID, err := uuid.NewUUID()
 	if err != nil {
@@ -57,7 +58,6 @@ func (g *geminiAdapter) Process(ctx context.Context, input adapters.ContractInpu
 	}
 	handlerChannel := rc
 
-	modelName := router.GenerateModelName(input.HandlerModel)
 	model := g.gp.GetModel("gemini-2.5-flash-lite")
 	model.Tools = g.ConvertTools(input.ToolList)
 
@@ -68,39 +68,45 @@ func (g *geminiAdapter) Process(ctx context.Context, input adapters.ContractInpu
 	var seq uint
 
 	ctx2, cancel := context.WithCancel(ctx)
-	bft := time.NewTicker(g.cfg.DeltaTimeDuration)
-	drained := make(chan struct{})
+	ticker := time.NewTicker(g.cfg.DeltaTimeDuration)
+	flusherDone := make(chan struct{})
 
+	// Helper: drain local buffer to channel (non-blocking on receiver side beyond the send).
 	drainRequestBuffer := func(ch adapters.ContractResponseChannel) bool {
 		if len(requestMsgBuffer) == 0 {
 			return false
 		}
 		snapshot := make([]adapters.ContractResponseDelta, len(requestMsgBuffer))
 		copy(snapshot, requestMsgBuffer)
+
 		select {
-		case <-ctx.Done():
+		case <-ctx2.Done():
 			return false
 		case ch <- snapshot:
 			requestMsgBuffer = requestMsgBuffer[:0]
 			return true
 		default:
+			// Receiver not ready right now; skip (next tick will try again)
 			return false
 		}
 	}
 
+	// Periodic flusher goroutine
 	go func() {
-		defer close(drained)
+		defer close(flusherDone)
 		for {
 			select {
 			case <-ctx2.Done():
 				return
-			case <-bft.C:
-				drainRequestBuffer(*handlerChannel)
+			case <-ticker.C:
+				// Best effort; if receiver is not ready, we try on the next tick
+				_ = drainRequestBuffer(*handlerChannel)
 			}
 		}
 	}()
 
-	err = g.gp.Chat(ctx2, modelName, iter, func(resp *genai.GenerateContentResponse) error {
+	// Collect deltas from Gemini into our local buffer
+	err = g.gp.Chat(ctx2, "", iter, func(resp *genai.GenerateContentResponse) error {
 		deltas := g.ConvertMsgBackward(resp)
 		for _, msg := range deltas {
 			seq++
@@ -110,21 +116,38 @@ func (g *geminiAdapter) Process(ctx context.Context, input adapters.ContractInpu
 		return nil
 	})
 
+	// Begin shutdown sequence in strict order:
+	// 1) Stop new flush ticks, 2) cancel ctx2, 3) wait flusher exit, 4) final drain, 5) send Done, 6) close channel.
+	ticker.Stop()
 	cancel()
-	<-drained
-	drainRequestBuffer(*handlerChannel)
+	<-flusherDone
 
-	// Send final "Done" message
-	requestMsgBuffer = append(requestMsgBuffer, adapters.ContractResponseDelta{
+	// Final drain: do a last best-effort flush of any remaining buffered deltas
+	_ = drainRequestBuffer(*handlerChannel)
+
+	// Send final Done (block a little to guarantee delivery, but avoid permanent deadlock)
+	finalDelta := []adapters.ContractResponseDelta{{
 		Done:      true,
 		CreatedAt: time.Now(),
-	})
-	drainRequestBuffer(*handlerChannel)
+	}}
 
+	// Small timeout context only for the final Done send
+	sendCtx, sendCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer sendCancel()
+
+	select {
+	case <-sendCtx.Done():
+		// Timeout — log and continue to close to avoid leaking
+		log.Printf("gemini: timeout sending final Done; closing channel anyway")
+	case *handlerChannel <- finalDelta:
+		// Done delivered
+	}
+
+	// Single point of closure: the adapter owns channel close
 	close(*handlerChannel)
 
 	if err != nil {
-		return adapters.ContractResponse{ID: genID, StartedAt: startedAt, Error: fmt.Errorf("Gemini chat failed: %w", err)}
+		return adapters.ContractResponse{ID: genID, StartedAt: startedAt, Error: fmt.Errorf("gemini chat failed: %w", err)}
 	}
 	return adapters.ContractResponse{ID: genID, StartedAt: startedAt, Done: true}
 }
@@ -133,9 +156,6 @@ func (g *geminiAdapter) Process(ctx context.Context, input adapters.ContractInpu
 func (g *geminiAdapter) ConvertMsgs(msgs []adapters.ContractMessage) []genai.Part {
 	var parts []genai.Part
 	for _, msg := range msgs {
-		// Gemini handles history differently; we construct a flat list of parts.
-		// Role is inferred by position or can be set on Content.
-		// For simplicity, we'll just send the text content.
 		content := fmt.Sprintf("[meta: msg sent at %v from %v] %v\n", msg.CreatedAt.Local(), msg.Role, msg.Content)
 		parts = append(parts, genai.Text(content))
 	}
@@ -160,9 +180,7 @@ func (g *geminiAdapter) ConvertMsgBackward(resp *genai.GenerateContentResponse) 
 		var toolCalls []adapters.ContractToolCall
 
 		for _, part := range cand.Content.Parts {
-			if txt, ok := part.(genai.Text); ok {
-				textMsg += string(txt)
-			}
+			// 1) Direct function calls
 			if fc, ok := part.(genai.FunctionCall); ok {
 				toolCalls = append(toolCalls, adapters.ContractToolCall{
 					ID:        uuid.New(),
@@ -170,20 +188,53 @@ func (g *geminiAdapter) ConvertMsgBackward(resp *genai.GenerateContentResponse) 
 					ToolName:  fc.Name,
 					Arguments: fc.Args,
 				})
+				continue
 			}
+
+			// 2) Text (may also contain JSON-encoded tool call)
+			if txt, ok := part.(genai.Text); ok {
+				textStr := string(txt)
+				textMsg += textStr
+
+				// Try to parse as JSON-encoded tool call (optional)
+				var potentialToolCall struct {
+					FunctionName string                 `json:"function_name"`
+					Arguments    map[string]interface{} `json:"arguments"`
+				}
+				if len(textStr) > 10 && textStr[0] == '{' && textStr[len(textStr)-1] == '}' {
+					if err := json.Unmarshal([]byte(textStr), &potentialToolCall); err == nil && potentialToolCall.FunctionName != "" {
+						toolCalls = append(toolCalls, adapters.ContractToolCall{
+							ID:        uuid.New(),
+							CreatedAt: createdAt,
+							ToolName:  potentialToolCall.FunctionName,
+							Arguments: potentialToolCall.Arguments,
+						})
+					}
+				}
+				continue
+			}
+
+			// 3) Unexpected parts
+			log.Printf("Encountered unexpected part type: %T, value: %+v", part, part)
 		}
 
-		deltas = append(deltas, adapters.ContractResponseDelta{
-			Msg: &adapters.ContractMessage{
-				Content:   textMsg,
-				Role:      adapters.ASSISTANT,
+		if textMsg != "" || len(toolCalls) > 0 {
+
+			td := adapters.ContractResponseDelta{
+				Msg: &adapters.ContractMessage{
+					Content:   textMsg,
+					Role:      adapters.ASSISTANT,
+					CreatedAt: createdAt,
+				},
+				ToolCalls: toolCalls,
+				Done:      false,
 				CreatedAt: createdAt,
-			},
-			ToolCalls: &toolCalls,
-			Done:      false,
-			CreatedAt: createdAt,
-		})
+			}
+			deltas = append(deltas, td)
+		}
+
 	}
+
 	return deltas
 }
 
@@ -208,7 +259,7 @@ func (g *geminiAdapter) ConvertTools(tools []adapters.ContractTool) []*genai.Too
 			case "boolean":
 				schemaType = genai.TypeBoolean
 			default:
-				schemaType = genai.TypeString // default to string
+				schemaType = genai.TypeString
 			}
 
 			properties[propName] = &genai.Schema{

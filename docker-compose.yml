@@ -271,6 +271,34 @@ services:
       - "traefik.http.routers.client.priority=1"
       - "traefik.http.services.client.loadbalancer.server.port=5173"
 
+  # ───────────────────────── Voice (opt-in with --profile voice) ─────────────────────────
+  sys-models:
+    profiles: [ "voice" ]
+    build:
+      context: ./services/sys-models
+      dockerfile: Dockerfile
+      target: development
+    restart: unless-stopped
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "8001"
+      LOG_LEVEL: "debug"
+    volumes:
+      # Live-reload: bind mount source for development
+      - ./services/sys-models:/app
+    networks: [ backend ]
+    ports: [ "8001:8001" ]
+    healthcheck:
+      test: [ "CMD", "python", "-c", "import requests; requests.get('http://localhost:8001/health').raise_for_status()" ]
+      <<: *health
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.sys-models.rule=PathPrefix(`/v1/models`)"
+      - "traefik.http.routers.sys-models.entrypoints=web"
+      - "traefik.http.services.sys-models.loadbalancer.server.port=8001"
+      - "traefik.http.middlewares.sys-models-strip.stripprefix.prefixes=/v1/models"
+      - "traefik.http.routers.sys-models.middlewares=sys-models-strip@docker"
+
   # Production client (opt-in with --profile client-prod)
   xarvis-client-prod:
     profiles: [ "client-prod" ]

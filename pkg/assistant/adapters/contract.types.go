@@ -67,7 +67,7 @@ type ContractToolCall struct {
 // response is by default a stream
 type ContractResponseDelta struct {
 	Msg       *ContractMessage
-	ToolCalls *[]ContractToolCall
+	ToolCalls []ContractToolCall
 	Error     error
 	Index     uint
 	Done      bool

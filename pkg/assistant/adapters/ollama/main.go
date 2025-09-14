@@ -65,7 +65,7 @@ func (o ollamaAdapter) ConvertMsgBackward(msgs []api.ChatResponse) []adapters.Co
 			cm,
 			adapters.ContractResponseDelta{
 				Msg:       &adapters.ContractMessage{Content: textMsg, Role: role, CreatedAt: createdAt},
-				ToolCalls: &toolCalls,
+				ToolCalls: toolCalls,
 				Done:      done,
 				CreatedAt: createdAt,
 			},

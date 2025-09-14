@@ -1,5 +1,5 @@
-import React, { useRef, useEffect } from 'react';
-import { User, Bot, Clock, MessageCircle } from 'lucide-react';
+import React, { useRef, useEffect, useMemo } from 'react';
+import { User, Bot, Clock, MessageCircle, Wifi, WifiOff } from 'lucide-react';
 import { useConversationStore } from '../../store';
 import { Message } from '../../services/api';
 import ReactMarkdown from 'react-markdown';
@@ -7,18 +7,31 @@ import './RecentMessages.css';
 
 interface RecentMessagesProps {
     className?: string;
+    maxMessages?: number;
+    showConnectionStatus?: boolean;
 }
 
-export const RecentMessages: React.FC<RecentMessagesProps> = ({ className = '' }) => {
-    const { recentMessages } = useConversationStore();
+export const RecentMessages: React.FC<RecentMessagesProps> = ({
+    className = '',
+    maxMessages = 10,
+    showConnectionStatus = true
+}) => {
+    const { recentMessages, isConnected, connectionState, listeningState } = useConversationStore();
     const messagesEndRef = useRef<HTMLDivElement>(null);
+
+    // Sort messages by timestamp (newest first for display, but maintain chronological order)
+    const sortedMessages = useMemo(() => {
+        return [...recentMessages]
+            .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+            .slice(-maxMessages); // Take the most recent messages
+    }, [recentMessages, maxMessages]);
 
     // Auto-scroll to the latest message when messages update
     useEffect(() => {
         if (messagesEndRef.current) {
             messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
         }
-    }, [recentMessages]);
+    }, [sortedMessages]);
 
     const formatTimestamp = (timestamp: string) => {
         const date = new Date(timestamp);
@@ -36,14 +49,25 @@ export const RecentMessages: React.FC<RecentMessagesProps> = ({ className = '' }
             return `${minutes}m ago`;
         }
 
-        // Less than 24 hours
+        // Less than 1 day
         if (diff < 86400000) {
             const hours = Math.floor(diff / 3600000);
             return `${hours}h ago`;
         }
 
-        // More than 24 hours
-        return date.toLocaleDateString();
+        // More than 1 day but less than 1 week
+        if (diff < 604800000) {
+            const days = Math.floor(diff / 86400000);
+            return `${days}d ago`;
+        }
+
+        // Format as date
+        return date.toLocaleDateString(undefined, {
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
     };
 
     const getRoleIcon = (role: Message['msg_role']) => {
@@ -72,12 +96,33 @@ export const RecentMessages: React.FC<RecentMessagesProps> = ({ className = '' }
         }
     };
 
-    if (recentMessages.length === 0) {
+    if (sortedMessages.length === 0) {
         return (
             <div className={`recent-messages-empty ${className}`}>
+                {showConnectionStatus && (
+                    <div className="connection-indicator">
+                        {isConnected ? (
+                            <div className="status-connected">
+                                <Wifi size={16} />
+                                <span>Connected</span>
+                                {listeningState !== 'idle' && (
+                                    <span className={`listening-badge ${listeningState}`}>
+                                        {listeningState}
+                                    </span>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="status-disconnected">
+                                <WifiOff size={16} />
+                                <span>{connectionState}</span>
+                            </div>
+                        )}
+                    </div>
+                )}
                 <div className="empty-state">
                     <MessageCircle size={24} opacity={0.5} />
                     <p>No recent messages</p>
+                    <small>Start a conversation to see messages here</small>
                 </div>
             </div>
         );
@@ -86,13 +131,36 @@ export const RecentMessages: React.FC<RecentMessagesProps> = ({ className = '' }
     return (
         <div className={`recent-messages ${className}`}>
             <div className="recent-messages-header">
-                <h3>Recent Messages</h3>
-                <span className="message-count">{recentMessages.length}</span>
+                <div className="header-title">
+                    <h3>Recent Messages</h3>
+                    <span className="message-count">{sortedMessages.length}</span>
+                </div>
+
+                {showConnectionStatus && (
+                    <div className="connection-indicator">
+                        {isConnected ? (
+                            <div className="status-connected">
+                                <Wifi size={14} />
+                                <span>Live</span>
+                                {listeningState !== 'idle' && (
+                                    <span className={`listening-badge ${listeningState}`}>
+                                        {listeningState}
+                                    </span>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="status-disconnected">
+                                <WifiOff size={14} />
+                                <span>{connectionState}</span>
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
 
             <div className="messages-timeline">
-                {recentMessages.map((message, index) => (
-                    <div key={message.id} className="timeline-item">
+                {sortedMessages.map((message, index) => (
+                    <div key={`${message.id}-${message.timestamp}`} className="timeline-item">
                         <div className="timeline-connector">
                             <div
                                 className="timeline-dot"
@@ -100,7 +168,7 @@ export const RecentMessages: React.FC<RecentMessagesProps> = ({ className = '' }
                             >
                                 {getRoleIcon(message.msg_role)}
                             </div>
-                            {index < recentMessages.length - 1 && (
+                            {index < sortedMessages.length - 1 && (
                                 <div className="timeline-line" />
                             )}
                         </div>
@@ -110,7 +178,7 @@ export const RecentMessages: React.FC<RecentMessagesProps> = ({ className = '' }
                                 <span className={`role-badge ${message.msg_role}`}>
                                     {message.msg_role}
                                 </span>
-                                <span className="timestamp">
+                                <span className="timestamp" title={new Date(message.timestamp).toLocaleString()}>
                                     {formatTimestamp(message.timestamp)}
                                 </span>
                             </div>
@@ -118,15 +186,15 @@ export const RecentMessages: React.FC<RecentMessagesProps> = ({ className = '' }
                             <div className="message-content">
                                 {message.msg_role === 'assistant' ? (
                                     <ReactMarkdown className="markdown-content">
-                                        {message.text.length > 150
-                                            ? message.text.substring(0, 150) + '...'
+                                        {message.text.length > 200
+                                            ? message.text.substring(0, 200) + '...'
                                             : message.text
                                         }
                                     </ReactMarkdown>
                                 ) : (
                                     <p className="text-content">
-                                        {message.text.length > 150
-                                            ? message.text.substring(0, 150) + '...'
+                                        {message.text.length > 200
+                                            ? message.text.substring(0, 200) + '...'
                                             : message.text
                                         }
                                     </p>
@@ -156,7 +224,7 @@ export const RecentMessages: React.FC<RecentMessagesProps> = ({ className = '' }
 
             <div className="recent-messages-footer">
                 <button className="view-all-button">
-                    View Full Conversation
+                    View Full Conversation ({recentMessages.length} total)
                 </button>
             </div>
         </div>

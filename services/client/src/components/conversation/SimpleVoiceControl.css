@@ -1,0 +1,167 @@
+/* Simple Voice Control Styles */
+.simple-voice-control {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    background: var(--background-secondary, #f8f9fa);
+    border-radius: 8px;
+    border: 1px solid var(--border-color, #e1e5e9);
+    max-width: 280px;
+}
+
+/* Status Bar */
+.status-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    min-width: 80px;
+}
+
+.connection-icon.connected {
+    color: var(--success-color, #28a745);
+}
+
+.connection-icon.disconnected {
+    color: var(--error-color, #dc3545);
+}
+
+.status-text {
+    white-space: nowrap;
+}
+
+.status-text.connected {
+    color: var(--success-color, #28a745);
+}
+
+.status-text.active {
+    color: var(--primary-color, #007bff);
+    font-weight: 600;
+}
+
+.status-text.passive {
+    color: var(--info-color, #17a2b8);
+}
+
+.status-text.idle {
+    color: var(--text-muted, #6c757d);
+}
+
+.status-text.disconnected {
+    color: var(--error-color, #dc3545);
+}
+
+/* Active Toggle Button */
+.active-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border: 2px solid var(--border-color, #e1e5e9);
+    background: var(--background-primary, #ffffff);
+    border-radius: 6px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-width: 100px;
+}
+
+.active-toggle:hover:not(:disabled) {
+    border-color: var(--primary-color, #007bff);
+    background: var(--primary-light, #f8f9ff);
+}
+
+.active-toggle:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    background: var(--background-disabled, #f8f9fa);
+}
+
+.active-toggle.active {
+    border-color: var(--primary-color, #007bff);
+    background: var(--primary-color, #007bff);
+    color: white;
+}
+
+.active-toggle.active:hover:not(:disabled) {
+    background: var(--primary-dark, #0056b3);
+    border-color: var(--primary-dark, #0056b3);
+}
+
+/* Streaming Indicator */
+.streaming-indicator {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.75rem;
+    color: var(--info-color, #17a2b8);
+    font-weight: 500;
+}
+
+.pulse-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--info-color, #17a2b8);
+    animation: pulse-streaming 1.5s ease-in-out infinite;
+}
+
+/* Animations */
+@keyframes pulse-streaming {
+
+    0%,
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+
+    50% {
+        opacity: 0.6;
+        transform: scale(1.2);
+    }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .simple-voice-control {
+        flex-direction: column;
+        gap: 0.5rem;
+        max-width: 100%;
+        padding: 0.75rem;
+    }
+
+    .status-bar {
+        min-width: auto;
+        justify-content: center;
+    }
+
+    .active-toggle {
+        min-width: auto;
+        width: 100%;
+        justify-content: center;
+    }
+
+    .streaming-indicator {
+        justify-content: center;
+    }
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+    .simple-voice-control {
+        --background-primary: #2d3748;
+        --background-secondary: #1a202c;
+        --background-disabled: #2d3748;
+        --text-muted: #a0aec0;
+        --border-color: #4a5568;
+        --primary-color: #4299e1;
+        --primary-light: #2a4a6b;
+        --primary-dark: #3182ce;
+        --success-color: #48bb78;
+        --error-color: #f56565;
+        --info-color: #38b2ac;
+    }
+}

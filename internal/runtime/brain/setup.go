@@ -68,7 +68,8 @@ func (bs *BrainSystem) ProcessMessage(
 	sessionID uuid.UUID,
 	msgs []types.Message,
 ) (*types.Message, error) {
-	msg, err := bs.Brain.Decide(ctx, msgs)
+
+	msg, err := bs.Brain.Decide(ctx, msgs, nil)
 	return &msg, err
 }
 
@@ -85,7 +86,12 @@ func (bs *BrainSystem) ProcessMessageWithStreaming(
 
 	// Start Brain.Decide with streaming in background
 	go func() {
-		defer close(responseChannel)
+		defer func() {
+			if r := recover(); r != nil {
+				bs.logger.Error("Recovered from panic in brain goroutine: %v", r)
+			}
+		}()
+
 		_, err := bs.Brain.Decide(ctx, msgs, &responseChannel)
 		if err != nil {
 			bs.logger.Error("Brain decide error: %v", err)
@@ -94,6 +100,12 @@ func (bs *BrainSystem) ProcessMessageWithStreaming(
 
 	// Stream through pipeline in a separate goroutine to avoid blocking
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				bs.logger.Error("Recovered from panic in pipeline goroutine: %v", r)
+			}
+		}()
+
 		err := bs.Pipeline.Broadcast(ctx, userID, sessionID, &responseChannel, disableAudio)
 		if err != nil {
 			bs.logger.Error("Pipeline broadcast error: %v", err)
