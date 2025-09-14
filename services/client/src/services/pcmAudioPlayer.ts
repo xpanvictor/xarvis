@@ -16,6 +16,8 @@ export interface AudioFormat {
 
 class PCMAudioPlayerService {
     private audioContext: AudioContext | null = null;
+    private htmlAudio: HTMLAudioElement | null = null;
+    private htmlAudioURL: string | null = null;
     private format: AudioFormat = {
         format: 'pcm',
         sampleRate: 22050,
@@ -29,8 +31,20 @@ class PCMAudioPlayerService {
     private isCollecting = false;
     private currentSource: AudioBufferSourceNode | null = null;
     private isPlaying = false;
+    private playbackMode: 'wav' | 'webaudio' = 'wav';
 
     // Public API ---------------------------------------------------------------
+    // Call at the start of a new server audio stream
+    startNewStream(stopCurrent: boolean = true) {
+        console.log('🔁 Starting new audio stream; resetting collection');
+        if (stopCurrent) {
+            this.stopAllAudio();
+        } else {
+            // If not stopping, at least clear buffer for next concatenation
+            this.isCollecting = false;
+            this.collectedPCMData = [];
+        }
+    }
 
     setAudioFormat(format: AudioFormat) {
         if (format.format !== 'pcm' || format.encoding !== 's16le') {
@@ -54,12 +68,8 @@ class PCMAudioPlayerService {
                 return;
             }
 
-            // Ensure 16-bit alignment (drop last byte if odd-sized)
-            if (pcmData.byteLength % 2 !== 0) {
-                console.warn(`⚠️ PCM chunk has odd length (${pcmData.byteLength}); trimming last byte for 16-bit alignment`);
-                const trimmed = pcmData.slice(0, pcmData.byteLength - 1);
-                pcmData = trimmed;
-            }
+            // Do not trim bytes; preserve exact stream bytes. If total length
+            // ends up odd, the final decode will ignore the last byte safely.
 
             // Start collecting if not already
             if (!this.isCollecting) {
@@ -86,12 +96,17 @@ class PCMAudioPlayerService {
             return;
         }
 
+        // If currently playing, we'll replace the source safely when starting
+        // the new buffer (no need to clear collected data here).
+
         try {
             console.log(`🎵 Playing collected audio: ${this.collectedPCMData.length} chunks`);
 
-            // Initialize audio context
-            await this.ensureContext();
-            console.log('✅ Audio context ensured');
+            // Initialize audio context if using WebAudio mode
+            if (this.playbackMode === 'webaudio') {
+                await this.ensureContext();
+                console.log('✅ Audio context ensured');
+            }
 
             // Concatenate all PCM data
             const concatenatedPCM = this.concatenateAllPCMData();
@@ -101,16 +116,25 @@ class PCMAudioPlayerService {
             }
             console.log(`✅ Concatenated PCM data: ${concatenatedPCM.byteLength} bytes`);
 
-            // Convert to AudioBuffer
-            const audioBuffer = this.pcmToAudioBuffer(concatenatedPCM);
-            if (!audioBuffer) {
-                console.error('❌ Failed to create AudioBuffer');
-                return;
+            if (this.playbackMode === 'webaudio') {
+                // Convert to AudioBuffer and play via WebAudio
+                const audioBuffer = this.pcmToAudioBuffer(concatenatedPCM);
+                if (!audioBuffer) {
+                    console.error('❌ Failed to create AudioBuffer');
+                    return;
+                }
+                console.log(`✅ Created AudioBuffer: ${audioBuffer.duration.toFixed(3)}s duration`);
+                await this.playAudioBuffer(audioBuffer);
+            } else {
+                // Build a WAV blob and play via HTMLAudioElement (matches backend debug file)
+                const wav = this.buildWavBlob(concatenatedPCM);
+                try {
+                    await this.playWavPreferMediaElement(wav);
+                } catch (e) {
+                    console.warn('⚠️ HTMLAudio playback failed, falling back to WebAudio decode', e);
+                    await this.playWavViaWebAudio(wav);
+                }
             }
-            console.log(`✅ Created AudioBuffer: ${audioBuffer.duration.toFixed(3)}s duration`);
-
-            // Play the complete audio
-            await this.playAudioBuffer(audioBuffer);
 
         } catch (error) {
             console.error('❌ Error playing collected audio:', error);
@@ -148,6 +172,17 @@ class PCMAudioPlayerService {
             }
             this.audioContext = null;
         }
+
+        // Stop and release HTMLAudio element
+        if (this.htmlAudio) {
+            try { this.htmlAudio.pause(); } catch {}
+            this.htmlAudio.src = '';
+            this.htmlAudio = null;
+        }
+        if (this.htmlAudioURL) {
+            try { URL.revokeObjectURL(this.htmlAudioURL); } catch {}
+            this.htmlAudioURL = null;
+        }
     }
 
     getQueueLength() {
@@ -160,6 +195,10 @@ class PCMAudioPlayerService {
 
     cleanup() {
         this.stopAllAudio();
+    }
+
+    setPlaybackMode(mode: 'wav' | 'webaudio') {
+        this.playbackMode = mode;
     }
 
     // Private Implementation --------------------------------------------------
@@ -205,6 +244,13 @@ class PCMAudioPlayerService {
         console.log(`▶️ Playing complete audio: ${audioBuffer.duration.toFixed(2)}s duration`);
         console.log(`📊 Audio details: ${audioBuffer.numberOfChannels} channels, ${audioBuffer.sampleRate}Hz, ${audioBuffer.length} frames`);
 
+        // Stop any existing source before starting a new one
+        if (this.currentSource) {
+            try { this.currentSource.stop(); } catch {}
+            this.currentSource.disconnect();
+            this.currentSource = null;
+        }
+
         // Create source
         const source = this.audioContext.createBufferSource();
         source.buffer = audioBuffer;
@@ -224,6 +270,104 @@ class PCMAudioPlayerService {
         // Start playback immediately
         source.start();
         console.log('✅ Audio playback started');
+    }
+
+    private buildWavBlob(pcmData: ArrayBuffer): Blob {
+        const { sampleRate, channels, bitsPerSample } = this.format;
+        const bytesPerSample = bitsPerSample / 8;
+        const dataLength = pcmData.byteLength;
+        const blockAlign = channels * bytesPerSample;
+        const byteRate = sampleRate * blockAlign;
+
+        const header = new ArrayBuffer(44);
+        const view = new DataView(header);
+        const writeString = (offset: number, s: string) => {
+            for (let i = 0; i < s.length; i++) view.setUint8(offset + i, s.charCodeAt(i));
+        };
+
+        // RIFF chunk descriptor
+        writeString(0, 'RIFF');
+        view.setUint32(4, 36 + dataLength, true); // ChunkSize
+        writeString(8, 'WAVE');
+
+        // fmt sub-chunk
+        writeString(12, 'fmt ');
+        view.setUint32(16, 16, true); // Subchunk1Size for PCM
+        view.setUint16(20, 1, true);  // AudioFormat = 1 (PCM)
+        view.setUint16(22, channels, true);
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, byteRate, true);
+        view.setUint16(32, blockAlign, true);
+        view.setUint16(34, bitsPerSample, true);
+
+        // data sub-chunk
+        writeString(36, 'data');
+        view.setUint32(40, dataLength, true);
+
+        const wavBuffer = new Uint8Array(44 + dataLength);
+        wavBuffer.set(new Uint8Array(header), 0);
+        wavBuffer.set(new Uint8Array(pcmData), 44);
+        return new Blob([wavBuffer], { type: 'audio/wav' });
+    }
+
+    private playWavPreferMediaElement(wav: Blob): Promise<void> {
+        return new Promise<void>((resolve, reject) => {
+            try {
+                // Tear down previous element/url
+                if (this.htmlAudio) {
+                    try { this.htmlAudio.pause(); } catch {}
+                    this.htmlAudio.src = '';
+                    this.htmlAudio = null;
+                }
+                if (this.htmlAudioURL) {
+                    try { URL.revokeObjectURL(this.htmlAudioURL); } catch {}
+                    this.htmlAudioURL = null;
+                }
+
+                const url = URL.createObjectURL(wav);
+                this.htmlAudioURL = url;
+                const audio = new Audio();
+                audio.preload = 'auto';
+                audio.src = url;
+
+                audio.onerror = (ev) => {
+                    this.isPlaying = false;
+                    reject(new Error('HTMLAudio error'));
+                };
+                audio.onended = () => {
+                    this.isPlaying = false;
+                    try {
+                        if (this.htmlAudioURL) URL.revokeObjectURL(this.htmlAudioURL);
+                    } catch {}
+                    this.htmlAudioURL = null;
+                    resolve();
+                };
+                audio.oncanplaythrough = () => {
+                    // Try to play once data is buffered
+                    audio.play().then(() => {
+                        this.isPlaying = true;
+                        resolve();
+                    }).catch((e) => {
+                        this.isPlaying = false;
+                        reject(e);
+                    });
+                };
+                // Kick load
+                audio.load();
+                this.htmlAudio = audio;
+            } catch (e) {
+                reject(e as any);
+            }
+        });
+    }
+
+    private async playWavViaWebAudio(wav: Blob): Promise<void> {
+        const ctx = await this.ensureContext();
+        const ab = await wav.arrayBuffer();
+        const audioBuffer = await new Promise<AudioBuffer>((resolve, reject) => {
+            ctx.decodeAudioData(ab, resolve, reject);
+        });
+        await this.playAudioBuffer(audioBuffer);
     }
 
     private async ensureContext(): Promise<AudioContext> {
@@ -262,18 +406,7 @@ class PCMAudioPlayerService {
             );
 
             // Convert PCM data (little-endian 16-bit signed)
-            const samples = new Int16Array(pcmData.byteLength / 2);
-            // Typed arrays read in platform endianness; use DataView to be explicit LE
-            const dv = new DataView(pcmData);
-            for (let i = 0; i < samples.length; i++) {
-                samples[i] = dv.getInt16(i * 2, true);
-            }
-
-            // Optional: compute DC offset and remove it (helps with low hum)
-            let mean = 0;
-            const nForMean = Math.min(samples.length, 48000); // sample a subset for speed
-            for (let i = 0; i < nForMean; i++) mean += samples[i];
-            mean /= nForMean || 1;
+            const samples = new Int16Array(pcmData);
 
             for (let channel = 0; channel < format.channels; channel++) {
                 const channelData = buffer.getChannelData(channel);
@@ -291,8 +424,8 @@ class PCMAudioPlayerService {
 
                     if (sampleIndex < samples.length) {
                         // Convert 16-bit signed integer to float [-1, 1]
-                        let s = samples[sampleIndex] - mean; // remove DC offset
-                        let sample = s >= 0 ? s / 32767.0 : s / 32768.0;
+                        const s = samples[sampleIndex];
+                        let sample = s / 32768.0;
 
                         // No harsh limiting - keep it natural
                         if (sample > 1.0) sample = 1.0;
@@ -304,15 +437,7 @@ class PCMAudioPlayerService {
                     }
                 }
 
-                // Apply gentle 5ms fade-in/out to reduce boundary clicks
-                const fadeSamples = Math.min(Math.floor(format.sampleRate * 0.005), frames);
-                for (let i = 0; i < fadeSamples; i++) {
-                    const gainIn = i / fadeSamples;
-                    channelData[i] *= gainIn;
-                    const j = frames - 1 - i;
-                    const gainOut = i / fadeSamples;
-                    channelData[j] *= gainOut;
-                }
+                // No fades; play exactly as concatenated, like backend
             }
 
             console.log(`✅ AudioBuffer created: ${buffer.duration.toFixed(3)}s`);

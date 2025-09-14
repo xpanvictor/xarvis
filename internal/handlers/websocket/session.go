@@ -174,11 +174,20 @@ func (s *Session) SendAudioFrame(sessionID uuid.UUID, seq int, frame []byte) err
 
 // SendEvent sends event to the WebSocket client
 func (s *Session) SendEvent(sessionID uuid.UUID, name string, payload any) error {
-	return s.SendWebSocketMessage(MessageTypeResponse, ResponseMessage{
-		Content:   fmt.Sprintf("Event: %s", name),
-		Type:      "event",
-		Timestamp: time.Now(),
-	})
+    s.mutex.Lock()
+    defer s.mutex.Unlock()
+
+    if !s.IsActive {
+        return fmt.Errorf("session not active")
+    }
+
+    // Send a plain event object to match client expectations: { name, payload }
+    msg := struct {
+        Name    string `json:"name"`
+        Payload any    `json:"payload"`
+    }{Name: name, Payload: payload}
+
+    return s.Conn.WriteJSON(msg)
 }
 
 // Touch updates the last activity timestamp

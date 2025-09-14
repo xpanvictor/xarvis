@@ -1,14 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { MemoryGraph } from '../components/memory/MemoryGraph';
-import { RecentMessages } from '../components/conversation/RecentMessages';
-import { StreamingMessage } from '../components/conversation/StreamingMessage';
+import { ChatThread } from '../components/conversation/ChatThread';
 import { SimpleVoiceControl } from '../components/conversation/SimpleVoiceControl';
 import { useConversationStore, useUIStore } from '../store';
 import { conversationAPI } from '../services/api';
 import webSocketService, { ConnectionState } from '../services/websocket';
 import audioService from '../services/audio';
 import pcmAudioPlayer from '../services/pcmAudioPlayer';
-import { Send, Settings, Plus, MessageSquare } from 'lucide-react';
+import { Send, Settings, Plus, MessageSquare, Volume2, VolumeX } from 'lucide-react';
 import './Dashboard.css';
 
 export const Dashboard: React.FC = () => {
@@ -20,6 +19,7 @@ export const Dashboard: React.FC = () => {
         isConnected,
         connectionState,
         listeningState,
+        isMuted,
         setConnectionState,
         streamingMessage,
         startStreamingMessage,
@@ -28,12 +28,14 @@ export const Dashboard: React.FC = () => {
         setStreamingAudio,
         setStreamingPCMAudio,
         clearStreamingMessage,
-        addMessage
+        addMessage,
+        setMuted
     } = useConversationStore();
     const { setSidebarOpen } = useUIStore();
     const [inputMessage, setInputMessage] = useState('');
     const [inputMode, setInputMode] = useState<'text' | 'voice'>('text');
     const [showVoiceControls, setShowVoiceControls] = useState(false);
+    const [viewMode, setViewMode] = useState<'split' | 'chat' | 'memory'>('split');
 
     // Initialize services and load conversation
     useEffect(() => {
@@ -51,6 +53,10 @@ export const Dashboard: React.FC = () => {
 
                 // Initialize WebSocket connection (URL is resolved inside the service)
                 webSocketService.connect();
+
+                // Sync mute state from persisted audio service setting
+                const savedMuted = audioService.isMutedState();
+                setMuted(savedMuted);
 
             } catch (error: any) {
                 if (mounted) {
@@ -77,6 +83,9 @@ export const Dashboard: React.FC = () => {
 
     // Handle WebSocket events for streaming
     useEffect(() => {
+        // Prevent duplicate playback per response
+        const audioPlayTriggeredRef = { current: false } as React.MutableRefObject<boolean>;
+
         // Handle streaming text (existing)
         const handleStreamingText = (content: string, isComplete: boolean) => {
             console.log(`📝 handleStreamingText: content="${content}", isComplete=${isComplete}, hasExistingMessage=${!!streamingMessage}`);
@@ -106,9 +115,12 @@ export const Dashboard: React.FC = () => {
             console.log(`📝 Text delta: index=${index}, text="${text}", hasExistingMessage=${!!streamingMessage}`);
 
             if (index === 1 || !streamingMessage) {
-                // Start of new message - clear any existing streaming message
+                // Start of new message; if prior streaming bubble exists,
+                // finalize it so it remains in the history, then start fresh.
                 console.log('🚀 Starting new message from text delta');
-                clearStreamingMessage();
+                if (streamingMessage && streamingMessage.content) {
+                    completeStreamingMessage();
+                }
                 startStreamingMessage();
                 updateStreamingContent(text);
             } else {
@@ -127,22 +139,55 @@ export const Dashboard: React.FC = () => {
             if (eventName === 'message_complete') {
                 // Mark streaming as complete
                 completeStreamingMessage();
-
-                // Also try to play audio if we have collected any (fallback)
-                setTimeout(() => {
-                    if (pcmAudioPlayer.getQueueLength() > 0) {
-                        console.log('🎵 Message complete - triggering audio playback as fallback');
-                        pcmAudioPlayer.playCollectedAudio();
+                // Fallback: if audio_complete did not arrive (or got lost),
+                // and we have collected PCM, trigger playback once.
+                if (!audioPlayTriggeredRef.current) {
+                    const muted = useConversationStore.getState().isMuted;
+                    const qlen = pcmAudioPlayer.getQueueLength();
+                    if (!muted && qlen > 0) {
+                        console.log('🎵 message_complete fallback - playing collected audio');
+                        audioPlayTriggeredRef.current = true;
+                        setTimeout(() => pcmAudioPlayer.playCollectedAudio(), 120);
                     }
-                }, 100);
+                }
             } else if (eventName === 'audio_format') {
                 // Store audio format info for PCM conversion
                 console.log('Audio format received:', payload);
+                // Reset collection for a fresh, single concatenation per message.
+                // Avoid cutting current playback mid-clip; let it finish naturally.
+                pcmAudioPlayer.startNewStream(false);
                 pcmAudioPlayer.setAudioFormat(payload);
+                // New stream beginning; allow a new play trigger for this message
+                audioPlayTriggeredRef.current = false;
             } else if (eventName === 'audio_complete') {
-                console.log('🎵 Audio streaming complete - playing collected audio');
-                // Play all collected audio at once
-                pcmAudioPlayer.playCollectedAudio();
+                // Only trigger once per response
+                if (!audioPlayTriggeredRef.current) {
+                    console.log('🎵 Audio streaming complete - playing collected audio');
+                    audioPlayTriggeredRef.current = true;
+                    // Respect mute state for autoplay
+                    const muted = useConversationStore.getState().isMuted;
+                    if (!muted) {
+                        // If the queue looks empty (rare out-of-order arrival), wait briefly then play
+                        const qlen = pcmAudioPlayer.getQueueLength();
+                        if (qlen === 0) {
+                            console.log('ℹ️ Audio queue empty at complete; retrying shortly');
+                            setTimeout(() => {
+                                if (pcmAudioPlayer.getQueueLength() > 0) {
+                                    pcmAudioPlayer.playCollectedAudio();
+                                } else {
+                                    // Attempt anyway in case of zero-length or silence
+                                    pcmAudioPlayer.playCollectedAudio();
+                                }
+                            }, 120);
+                        } else {
+                            pcmAudioPlayer.playCollectedAudio();
+                        }
+                    } else {
+                        console.log('🔇 Autoplay skipped due to mute');
+                    }
+                } else {
+                    console.log('ℹ️ Skipping duplicate audio_complete playback trigger');
+                }
             }
         };
 
@@ -236,7 +281,11 @@ export const Dashboard: React.FC = () => {
 
             if (inputMode === 'text' && isConnected) {
                 // Always use WebSocket for real-time streaming
-                clearStreamingMessage(); // Clear any previous streaming message
+                // If a previous streaming bubble exists and hasn't finalized, finalize it
+                const sm = useConversationStore.getState().streamingMessage;
+                if (sm && sm.isStreaming && sm.content) {
+                    completeStreamingMessage();
+                }
                 webSocketService.sendTextMessage(inputMessage);
             } else {
                 // Fallback to API only if WebSocket is not connected
@@ -272,6 +321,10 @@ export const Dashboard: React.FC = () => {
                 </div>
 
                 <div className="header-actions">
+                    <span className="stat" title={isMuted ? 'Muted' : 'Sound on'} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        {isMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
+                        {isMuted ? 'Muted' : 'Sound on'}
+                    </span>
                     <button className="action-button">
                         <Plus size={16} />
                         New Memory
@@ -284,7 +337,7 @@ export const Dashboard: React.FC = () => {
 
             <div className="dashboard-content">
                 {/* Main Memory Graph Area */}
-                <div className="memory-section">
+                <div className={`memory-section ${viewMode === 'memory' ? 'expanded' : viewMode === 'chat' ? 'collapsed' : ''}`}>
                     <div className="section-header">
                         <h2>Memory Graph</h2>
                         <div className="memory-stats">
@@ -297,6 +350,15 @@ export const Dashboard: React.FC = () => {
                             <span className="stat">
                                 {conversation?.memories?.filter(m => m.memory_type === 'semantic').length || 0} semantic
                             </span>
+                            {viewMode === 'memory' ? (
+                                <button className={`action-button secondary`} onClick={() => setViewMode('split')} title="Split view" style={{ marginLeft: 8 }}>
+                                    Split ◫
+                                </button>
+                            ) : (
+                                <button className={`action-button secondary`} onClick={() => setViewMode('memory')} title="Expand memory" style={{ marginLeft: 8 }}>
+                                    Expand ⤢
+                                </button>
+                            )}
                         </div>
                     </div>
 
@@ -305,23 +367,23 @@ export const Dashboard: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Recent Messages Sidebar */}
-                <div className="messages-section">
-                    {/* Streaming Message Display */}
-                    {streamingMessage && (
-                        <StreamingMessage
-                            content={streamingMessage.content}
-                            isStreaming={streamingMessage.isStreaming}
-                            audioBlob={streamingMessage.audioBlob}
-                            pcmAudioData={streamingMessage.pcmAudioData}
-                            onComplete={() => {
-                                // Clear streaming message after completion
-                                setTimeout(() => clearStreamingMessage(), 2000);
-                            }}
-                        />
-                    )}
-
-                    <RecentMessages />
+                {/* Unified Chat Thread */}
+                <div className={`messages-section ${viewMode === 'chat' ? 'expanded' : viewMode === 'memory' ? 'collapsed' : ''}`}>
+                    <div className="section-header">
+                        <h2>Conversation</h2>
+                        <div>
+                            {viewMode === 'chat' ? (
+                                <button className={`action-button secondary`} onClick={() => setViewMode('split')} title="Split view">
+                                    Split ◫
+                                </button>
+                            ) : (
+                                <button className={`action-button secondary`} onClick={() => setViewMode('chat')} title="Expand chat">
+                                    Chat ⤢
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                    <ChatThread />
                 </div>
             </div>
 
@@ -375,18 +437,18 @@ export const Dashboard: React.FC = () => {
                         <div className="status-dot"></div>
                         <span>{isConnected ? 'Connected' : connectionState}</span>
                     </div>
-
-                    {/* Debug button for testing audio */}
+                    {/* Mute toggle controlling autoplay */}
                     <button
                         onClick={() => {
-                            console.log('🔧 Debug: Manually triggering audio playback');
-                            console.log('🔧 Queue length:', pcmAudioPlayer.getQueueLength());
-                            console.log('🔧 Is playing:', pcmAudioPlayer.getIsPlaying());
-                            pcmAudioPlayer.playCollectedAudio();
+                            const curr = useConversationStore.getState().isMuted;
+                            useConversationStore.getState().setMuted(!curr);
+                            try { audioService.setMuted(!curr); } catch {}
                         }}
+                        className={`mute-toggle ${isMuted ? 'muted' : ''}`}
+                        title={isMuted ? 'Unmute' : 'Mute'}
                         style={{ marginLeft: '10px', padding: '4px 8px', fontSize: '12px' }}
                     >
-                        🔧 Play Audio
+                        {isMuted ? 'Unmute 🔈' : 'Mute 🔇'}
                     </button>
 
                     {listeningState !== 'idle' && (

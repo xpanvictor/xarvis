@@ -220,13 +220,6 @@ class WebSocketService {
                 return;
             }
 
-            // Check for special audio completion patterns
-            if (messageData.includes('audio_complete') || messageData.includes('stream_end') || messageData.includes('audio_end')) {
-                console.log('🎵 Detected audio completion pattern in message:', messageData);
-                this.emit('onEvent', 'audio_complete', {});
-                return;
-            }
-
             // Try to parse as JSON
             let message: any;
             try {

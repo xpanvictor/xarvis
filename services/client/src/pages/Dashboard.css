@@ -84,6 +84,10 @@
     flex-direction: column;
     overflow: hidden;
     min-height: 0;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 12px;
+    padding: 8px;
+    background: rgba(0, 0, 0, 0.1);
 }
 
 .section-header {
@@ -130,7 +134,17 @@
     flex-direction: column;
     overflow: hidden;
     min-height: 0;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 12px;
+    padding: 8px;
+    background: rgba(0, 0, 0, 0.15);
 }
+
+/* Expand/Collapse behavior in grid */
+.memory-section.expanded { grid-column: 1 / span 2; }
+.messages-section.expanded { grid-column: 1 / span 2; }
+.memory-section.collapsed { display: none; }
+.messages-section.collapsed { display: none; }
 
 .input-section {
     padding: 1rem 2rem;
