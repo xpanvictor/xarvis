@@ -3,6 +3,7 @@ package handlers
 import (
 	"github.com/xpanvictor/xarvis/internal/domains/note"
 	"github.com/xpanvictor/xarvis/internal/domains/project"
+	"github.com/xpanvictor/xarvis/internal/domains/task"
 	"github.com/xpanvictor/xarvis/internal/domains/user"
 	"github.com/xpanvictor/xarvis/internal/types"
 )
@@ -153,4 +154,42 @@ type SearchNotesResponse struct {
 	Pagination PaginationInfo      `json:"pagination"`
 	Query      string              `json:"query,omitempty"`
 	Tags       []string            `json:"tags,omitempty"`
+}
+
+// Task-related responses
+
+// CreateTaskResponse represents the response for task creation
+type CreateTaskResponse struct {
+	Message string            `json:"message" example:"Task created successfully"`
+	Task    task.TaskResponse `json:"task"`
+}
+
+// TaskResponse represents the response for getting a single task
+type TaskResponse struct {
+	Task task.TaskResponse `json:"task"`
+}
+
+// UpdateTaskResponse represents the response for updating a task
+type UpdateTaskResponse struct {
+	Message string            `json:"message" example:"Task updated successfully"`
+	Task    task.TaskResponse `json:"task"`
+}
+
+// ListTasksResponse represents the response for listing tasks
+type ListTasksResponse struct {
+	Tasks      []task.TaskResponse `json:"tasks"`
+	Pagination PaginationInfo      `json:"pagination"`
+}
+
+// SearchTasksResponse represents the response for searching tasks
+type SearchTasksResponse struct {
+	Tasks      []task.TaskResponse `json:"tasks"`
+	Pagination PaginationInfo      `json:"pagination"`
+	Query      string              `json:"query,omitempty"`
+}
+
+// BulkUpdateStatusRequest represents the request for bulk status updates
+type BulkUpdateStatusRequest struct {
+	TaskIDs []string        `json:"taskIds" binding:"required"`
+	Status  task.TaskStatus `json:"status" binding:"required"`
 }

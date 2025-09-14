@@ -6,6 +6,7 @@ import (
 	"github.com/xpanvictor/xarvis/internal/repository/conversation"
 	noteRepo "github.com/xpanvictor/xarvis/internal/repository/note"
 	projectRepo "github.com/xpanvictor/xarvis/internal/repository/project"
+	taskRepo "github.com/xpanvictor/xarvis/internal/repository/task"
 	userRepo "github.com/xpanvictor/xarvis/internal/repository/user"
 	"gorm.io/gorm"
 )
@@ -18,6 +19,7 @@ func MigrateDB(db *gorm.DB) {
 		&conversation.MemoryChunkEntity{},
 		&projectRepo.ProjectEntity{},
 		&noteRepo.NoteEntity{},
+		&taskRepo.TaskEntity{},
 	)
 
 	// Create vector index with TiDB-specific syntax for columnar replica

@@ -17,6 +17,7 @@ import (
 	"github.com/xpanvictor/xarvis/internal/domains/note"
 	"github.com/xpanvictor/xarvis/internal/domains/project"
 	"github.com/xpanvictor/xarvis/internal/domains/sys_manager/pipeline"
+	"github.com/xpanvictor/xarvis/internal/domains/task"
 	"github.com/xpanvictor/xarvis/internal/domains/user"
 	"github.com/xpanvictor/xarvis/internal/handlers"
 	wshandler "github.com/xpanvictor/xarvis/internal/handlers/websocket"
@@ -49,6 +50,8 @@ type Dependencies struct {
 	// Project and Note management dependencies
 	ProjectService project.ProjectService
 	NoteService    note.NoteService
+	// Task management dependencies
+	TaskService task.TaskService
 }
 
 // NewServerDependencies creates dependencies for server initialization
@@ -100,6 +103,10 @@ func InitializeRoutes(cfg *config.Settings, r *gin.Engine, dep Dependencies) {
 	// Note management routes
 	noteHandler := handlers.NewNoteHandler(dep.NoteService, dep.Logger)
 	noteHandler.RegisterNoteRoutes(v1, dep.UserService)
+
+	// Task management routes
+	taskHandler := handlers.NewTaskHandler(dep.TaskService, dep.Logger)
+	taskHandler.RegisterTaskRoutes(v1, dep.UserService)
 
 	// Register project routes with note handler for project-note endpoints
 	projectHandler.RegisterProjectRoutes(v1, dep.UserService, noteHandler)

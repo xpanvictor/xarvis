@@ -12,6 +12,18 @@ definitions:
     - ASSISTANT
     - SYSTEM
     - TOOL
+  handlers.BulkUpdateStatusRequest:
+    properties:
+      status:
+        $ref: '#/definitions/task.TaskStatus'
+      taskIds:
+        items:
+          type: string
+        type: array
+    required:
+    - status
+    - taskIds
+    type: object
   handlers.ConversationResponse:
     properties:
       conversation:
@@ -32,6 +44,14 @@ definitions:
         type: string
       project:
         $ref: '#/definitions/project.ProjectResponse'
+    type: object
+  handlers.CreateTaskResponse:
+    properties:
+      message:
+        example: Task created successfully
+        type: string
+      task:
+        $ref: '#/definitions/task.TaskResponse'
     type: object
   handlers.DeleteAccountResponse:
     properties:
@@ -64,6 +84,15 @@ definitions:
       projects:
         items:
           $ref: '#/definitions/project.ProjectResponse'
+        type: array
+    type: object
+  handlers.ListTasksResponse:
+    properties:
+      pagination:
+        $ref: '#/definitions/handlers.PaginationInfo'
+      tasks:
+        items:
+          $ref: '#/definitions/task.TaskResponse'
         type: array
     type: object
   handlers.ListUsersResponse:
@@ -161,11 +190,27 @@ definitions:
           type: string
         type: array
     type: object
+  handlers.SearchTasksResponse:
+    properties:
+      pagination:
+        $ref: '#/definitions/handlers.PaginationInfo'
+      query:
+        type: string
+      tasks:
+        items:
+          $ref: '#/definitions/task.TaskResponse'
+        type: array
+    type: object
   handlers.SuccessResponse:
     properties:
       message:
         example: Operation completed successfully
         type: string
+    type: object
+  handlers.TaskResponse:
+    properties:
+      task:
+        $ref: '#/definitions/task.TaskResponse'
     type: object
   handlers.UpdateNoteResponse:
     properties:
@@ -199,6 +244,14 @@ definitions:
         example: in_progress
     required:
     - status
+    type: object
+  handlers.UpdateTaskResponse:
+    properties:
+      message:
+        example: Task updated successfully
+        type: string
+      task:
+        $ref: '#/definitions/task.TaskResponse'
     type: object
   handlers.UserByIDResponse:
     properties:
@@ -456,6 +509,192 @@ definitions:
         items:
           type: string
         type: array
+    type: object
+  task.CalendarTaskResponse:
+    properties:
+      dueAt:
+        type: string
+      id:
+        type: string
+      isRecurring:
+        type: boolean
+      priority:
+        type: integer
+      scheduledAt:
+        type: string
+      status:
+        $ref: '#/definitions/task.TaskStatus'
+      title:
+        type: string
+    type: object
+  task.CreateTaskRequest:
+    properties:
+      description:
+        maxLength: 1000
+        type: string
+      dueAt:
+        type: string
+      isRecurring:
+        type: boolean
+      metadata:
+        additionalProperties: {}
+        type: object
+      priority:
+        maximum: 5
+        minimum: 1
+        type: integer
+      recurrenceConfig:
+        $ref: '#/definitions/task.RecurrenceConfig'
+      scheduledAt:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+      title:
+        maxLength: 200
+        minLength: 1
+        type: string
+    required:
+    - title
+    type: object
+  task.RecurrenceConfig:
+    properties:
+      daysOfMonth:
+        description: For monthly (1-31)
+        items:
+          type: integer
+        type: array
+      daysOfWeek:
+        description: For weekly (0=Sunday, 1=Monday, etc.)
+        items:
+          type: integer
+        type: array
+      endDate:
+        description: When to stop recurring
+        type: string
+      interval:
+        description: For custom recurrence (e.g., every 2 days)
+        type: integer
+      maxOccurrences:
+        description: Maximum number of occurrences
+        type: integer
+      monthsOfYear:
+        description: For yearly (1-12)
+        items:
+          type: integer
+        type: array
+      timeZone:
+        description: Timezone for scheduling
+        type: string
+      type:
+        $ref: '#/definitions/task.RecurrenceType'
+    type: object
+  task.RecurrenceType:
+    enum:
+    - none
+    - daily
+    - weekly
+    - monthly
+    - yearly
+    - custom
+    type: string
+    x-enum-varnames:
+    - RecurrenceNone
+    - RecurrenceDaily
+    - RecurrenceWeekly
+    - RecurrenceMonthly
+    - RecurrenceYearly
+    - RecurrenceCustom
+  task.TaskResponse:
+    properties:
+      cancelledAt:
+        type: string
+      completedAt:
+        type: string
+      createdAt:
+        type: string
+      description:
+        type: string
+      dueAt:
+        type: string
+      executionCount:
+        type: integer
+      id:
+        type: string
+      isRecurring:
+        type: boolean
+      metadata:
+        additionalProperties: {}
+        type: object
+      nextExecution:
+        type: string
+      parentTaskId:
+        type: string
+      priority:
+        type: integer
+      recurrenceConfig:
+        $ref: '#/definitions/task.RecurrenceConfig'
+      scheduledAt:
+        type: string
+      status:
+        $ref: '#/definitions/task.TaskStatus'
+      tags:
+        items:
+          type: string
+        type: array
+      title:
+        type: string
+      updatedAt:
+        type: string
+      userId:
+        type: string
+    type: object
+  task.TaskStatus:
+    enum:
+    - pending
+    - cancelled
+    - done
+    type: string
+    x-enum-varnames:
+    - StatusPending
+    - StatusCancelled
+    - StatusDone
+  task.UpdateTaskRequest:
+    properties:
+      description:
+        maxLength: 1000
+        type: string
+      dueAt:
+        type: string
+      isRecurring:
+        type: boolean
+      metadata:
+        additionalProperties: {}
+        type: object
+      priority:
+        maximum: 5
+        minimum: 1
+        type: integer
+      recurrenceConfig:
+        $ref: '#/definitions/task.RecurrenceConfig'
+      scheduledAt:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+      title:
+        maxLength: 200
+        minLength: 1
+        type: string
+    type: object
+  task.UpdateTaskStatusRequest:
+    properties:
+      status:
+        $ref: '#/definitions/task.TaskStatus'
+    required:
+    - status
     type: object
   types.Conversation:
     properties:
@@ -804,6 +1043,72 @@ paths:
       security:
       - BearerAuth: []
       summary: List all projects (Admin)
+      tags:
+      - Admin
+  /admin/tasks:
+    get:
+      consumes:
+      - application/json
+      description: List all tasks in the system with optional filtering (admin only)
+      parameters:
+      - description: Filter by status
+        in: query
+        name: status
+        type: string
+      - description: Filter by priority
+        in: query
+        name: priority
+        type: integer
+      - description: Filter by tags (comma-separated)
+        in: query
+        name: tags
+        type: string
+      - description: Search in task content
+        in: query
+        name: search
+        type: string
+      - default: createdAt
+        description: Order by field
+        in: query
+        name: orderBy
+        type: string
+      - default: desc
+        description: Order direction (asc, desc)
+        in: query
+        name: order
+        type: string
+      - default: 0
+        description: Number of tasks to skip
+        in: query
+        name: offset
+        type: integer
+      - default: 20
+        description: Number of tasks to return
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of tasks with pagination
+          schema:
+            $ref: '#/definitions/handlers.ListTasksResponse'
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "403":
+          description: Admin access required
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List all tasks (Admin)
       tags:
       - Admin
   /admin/users:
@@ -1819,6 +2124,712 @@ paths:
       summary: Create project note/log
       tags:
       - Projects
+  /tasks:
+    get:
+      consumes:
+      - application/json
+      description: List all tasks for the authenticated user with optional filtering
+      parameters:
+      - description: Filter by status (pending, done, cancelled)
+        in: query
+        name: status
+        type: string
+      - description: Filter by priority (1-5)
+        in: query
+        name: priority
+        type: integer
+      - description: Filter by tags (comma-separated)
+        in: query
+        name: tags
+        type: string
+      - description: Filter by recurring status
+        in: query
+        name: isRecurring
+        type: boolean
+      - description: Filter overdue tasks
+        in: query
+        name: isOverdue
+        type: boolean
+      - description: Filter from date (RFC3339)
+        in: query
+        name: fromDate
+        type: string
+      - description: Filter to date (RFC3339)
+        in: query
+        name: toDate
+        type: string
+      - description: Search in task title and description
+        in: query
+        name: search
+        type: string
+      - default: createdAt
+        description: Order by field (scheduledAt, dueAt, priority, createdAt)
+        in: query
+        name: orderBy
+        type: string
+      - default: desc
+        description: Order direction (asc, desc)
+        in: query
+        name: order
+        type: string
+      - default: 0
+        description: Number of tasks to skip
+        in: query
+        name: offset
+        type: integer
+      - default: 20
+        description: Number of tasks to return
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of tasks with pagination
+          schema:
+            $ref: '#/definitions/handlers.ListTasksResponse'
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List user tasks
+      tags:
+      - Tasks
+    post:
+      consumes:
+      - application/json
+      description: Create a new task for the authenticated user
+      parameters:
+      - description: Task creation data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/task.CreateTaskRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Task created successfully
+          schema:
+            $ref: '#/definitions/handlers.CreateTaskResponse'
+        "400":
+          description: Invalid request data
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a new task
+      tags:
+      - Tasks
+  /tasks/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete a specific task (user can only delete their own tasks)
+      parameters:
+      - description: Task ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Task deleted successfully
+          schema:
+            $ref: '#/definitions/handlers.SuccessResponse'
+        "400":
+          description: Invalid task ID
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "403":
+          description: Unauthorized access
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "404":
+          description: Task not found
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete task
+      tags:
+      - Tasks
+    get:
+      consumes:
+      - application/json
+      description: Get a specific task by ID (user can only access their own tasks)
+      parameters:
+      - description: Task ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Task data
+          schema:
+            $ref: '#/definitions/handlers.TaskResponse'
+        "400":
+          description: Invalid task ID
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "403":
+          description: Unauthorized access
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "404":
+          description: Task not found
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get task by ID
+      tags:
+      - Tasks
+    put:
+      consumes:
+      - application/json
+      description: Update a specific task (user can only update their own tasks)
+      parameters:
+      - description: Task ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Task update data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/task.UpdateTaskRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Task updated successfully
+          schema:
+            $ref: '#/definitions/handlers.UpdateTaskResponse'
+        "400":
+          description: Invalid request data
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "403":
+          description: Unauthorized access
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "404":
+          description: Task not found
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update task
+      tags:
+      - Tasks
+  /tasks/{id}/cancel:
+    post:
+      consumes:
+      - application/json
+      description: Mark a specific task as cancelled
+      parameters:
+      - description: Task ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Task marked as cancelled
+          schema:
+            $ref: '#/definitions/handlers.UpdateTaskResponse'
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "403":
+          description: Unauthorized access
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "404":
+          description: Task not found
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Mark task as cancelled
+      tags:
+      - Tasks
+  /tasks/{id}/complete:
+    post:
+      consumes:
+      - application/json
+      description: Mark a specific task as completed
+      parameters:
+      - description: Task ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Task marked as completed
+          schema:
+            $ref: '#/definitions/handlers.UpdateTaskResponse'
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "403":
+          description: Unauthorized access
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "404":
+          description: Task not found
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Mark task as completed
+      tags:
+      - Tasks
+  /tasks/{id}/status:
+    put:
+      consumes:
+      - application/json
+      description: Update the status of a specific task
+      parameters:
+      - description: Task ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Status update data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/task.UpdateTaskStatusRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Task status updated successfully
+          schema:
+            $ref: '#/definitions/handlers.UpdateTaskResponse'
+        "400":
+          description: Invalid request data
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "403":
+          description: Unauthorized access
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "404":
+          description: Task not found
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update task status
+      tags:
+      - Tasks
+  /tasks/{parentId}/instances:
+    get:
+      consumes:
+      - application/json
+      description: Get all instances of a recurring task
+      parameters:
+      - description: Parent Task ID
+        in: path
+        name: parentId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of task instances
+          schema:
+            items:
+              $ref: '#/definitions/task.TaskResponse'
+            type: array
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "403":
+          description: Unauthorized access
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "404":
+          description: Parent task not found
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get task instances
+      tags:
+      - Tasks
+  /tasks/bulk/status:
+    put:
+      consumes:
+      - application/json
+      description: Update status for multiple tasks at once
+      parameters:
+      - description: Bulk update request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.BulkUpdateStatusRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Tasks updated successfully
+          schema:
+            $ref: '#/definitions/handlers.SuccessResponse'
+        "400":
+          description: Invalid request data
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Bulk update task status
+      tags:
+      - Tasks
+  /tasks/calendar:
+    get:
+      consumes:
+      - application/json
+      description: Get tasks for calendar view within specified date range
+      parameters:
+      - description: Start date (RFC3339)
+        in: query
+        name: fromDate
+        required: true
+        type: string
+      - description: End date (RFC3339)
+        in: query
+        name: toDate
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of calendar tasks
+          schema:
+            items:
+              $ref: '#/definitions/task.CalendarTaskResponse'
+            type: array
+        "400":
+          description: Invalid date parameters
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get calendar tasks
+      tags:
+      - Tasks
+  /tasks/due-today:
+    get:
+      consumes:
+      - application/json
+      description: Get all tasks due today for the authenticated user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of tasks due today
+          schema:
+            items:
+              $ref: '#/definitions/task.TaskResponse'
+            type: array
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get tasks due today
+      tags:
+      - Tasks
+  /tasks/overdue:
+    get:
+      consumes:
+      - application/json
+      description: Get all overdue tasks for the authenticated user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of overdue tasks
+          schema:
+            items:
+              $ref: '#/definitions/task.TaskResponse'
+            type: array
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get overdue tasks
+      tags:
+      - Tasks
+  /tasks/recurring:
+    get:
+      consumes:
+      - application/json
+      description: Get all recurring tasks for the authenticated user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of recurring tasks
+          schema:
+            items:
+              $ref: '#/definitions/task.TaskResponse'
+            type: array
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get recurring tasks
+      tags:
+      - Tasks
+  /tasks/search:
+    get:
+      consumes:
+      - application/json
+      description: Search tasks by content and/or other criteria for the authenticated
+        user
+      parameters:
+      - description: Search query
+        in: query
+        name: q
+        required: true
+        type: string
+      - description: Filter by status
+        in: query
+        name: status
+        type: string
+      - description: Filter by tags (comma-separated)
+        in: query
+        name: tags
+        type: string
+      - default: 0
+        description: Number of tasks to skip
+        in: query
+        name: offset
+        type: integer
+      - default: 20
+        description: Number of tasks to return
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Search results with pagination
+          schema:
+            $ref: '#/definitions/handlers.SearchTasksResponse'
+        "400":
+          description: Search query is required
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Search tasks
+      tags:
+      - Tasks
+  /tasks/tags:
+    get:
+      consumes:
+      - application/json
+      description: Get tasks filtered by specific tags for the authenticated user
+      parameters:
+      - description: Tags to filter by (comma-separated)
+        in: query
+        name: tags
+        required: true
+        type: string
+      - default: 0
+        description: Number of tasks to skip
+        in: query
+        name: offset
+        type: integer
+      - default: 20
+        description: Number of tasks to return
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of tasks with pagination
+          schema:
+            $ref: '#/definitions/handlers.ListTasksResponse'
+        "400":
+          description: Tags parameter is required
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get tasks by tags
+      tags:
+      - Tasks
+  /tasks/upcoming:
+    get:
+      consumes:
+      - application/json
+      description: Get upcoming tasks for the authenticated user within specified
+        days
+      parameters:
+      - default: 7
+        description: Number of days to look ahead
+        in: query
+        name: days
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of upcoming tasks
+          schema:
+            items:
+              $ref: '#/definitions/task.TaskResponse'
+            type: array
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get upcoming tasks
+      tags:
+      - Tasks
   /user/account:
     delete:
       consumes:
