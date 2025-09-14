@@ -96,9 +96,9 @@ type MemoriesResponse struct {
 
 // MemorySearchRequest represents the request for searching memories
 type MemorySearchRequest struct {
-	Query      string              `json:"query" binding:"required" example:"remember something"`
-	Type       *types.MemoryType   `json:"type,omitempty" example:"episodic"`
-	Limit      int                 `json:"limit,omitempty" example:"10"`
+	Query string            `json:"query" binding:"required" example:"remember something"`
+	Type  *types.MemoryType `json:"type,omitempty" example:"episodic"`
+	Limit int               `json:"limit,omitempty" example:"10"`
 }
 
 // ConversationResponse represents the response for getting conversation

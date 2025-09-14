@@ -180,7 +180,7 @@ func (c *conversationService) SearchMemories(ctx context.Context, userID uuid.UU
 func (c *conversationService) DeleteMemory(ctx context.Context, userID uuid.UUID, memoryID uuid.UUID) error {
 	// Note: We could add additional validation here to ensure the memory belongs to the user
 	// For now, we'll rely on the repository layer
-	
+
 	err := c.repository.DeleteMemory(ctx, memoryID)
 	if err != nil {
 		return fmt.Errorf("failed to delete memory: %w", err)
