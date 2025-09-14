@@ -79,16 +79,29 @@ type AuthConfig struct {
 	TokenTTLHours int    `mapstructure:"token_ttl_hours"`
 }
 
+type SystemManagerConfig struct {
+	MessageSummarizerInterval string `mapstructure:"message_summarizer_interval"` // e.g., "3m"
+	Enabled                   bool   `mapstructure:"enabled"`
+}
+
+type ProcessorConfig struct {
+	GeminiAPIKey  string `mapstructure:"gemini_api_key"`
+	GeminiModel   string `mapstructure:"gemini_model"`
+	Enabled       bool   `mapstructure:"enabled"`
+}
+
 type Settings struct {
-	DB            DBConfig         `mapstructure:"database"`
-	RedisDB       RedisConfig      `mapstructure:"redis"`
-	AssistantKeys AssistantKeysObj `mapstructure:"assistantKeys"`
-	Env           string           `mapstructure:"env"`
-	Debug         bool             `mapstructure:"debug" default:"false"`
+	DB            DBConfig            `mapstructure:"database"`
+	RedisDB       RedisConfig         `mapstructure:"redis"`
+	AssistantKeys AssistantKeysObj    `mapstructure:"assistantKeys"`
+	Env           string              `mapstructure:"env"`
+	Debug         bool                `mapstructure:"debug" default:"false"`
 	BrainConfig   BrainConfig
-	SysModels     SysModelsConfig `mapstructure:"sys_models"`
-	Voice         VoiceConfig     `mapstructure:"voice"`
-	Auth          AuthConfig      `mapstructure:"auth"`
+	SysModels     SysModelsConfig     `mapstructure:"sys_models"`
+	Voice         VoiceConfig         `mapstructure:"voice"`
+	Auth          AuthConfig          `mapstructure:"auth"`
+	SystemManager SystemManagerConfig `mapstructure:"system_manager"`
+	Processor     ProcessorConfig     `mapstructure:"processor"`
 }
 
 func Load() (*Settings, error) {
