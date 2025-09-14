@@ -86,6 +86,46 @@ func (g *GormConversationrepo) CreateMemory(ctx context.Context, conversationID 
 	return me.ToDomain(), nil
 }
 
+// DeleteMemory implements types.ConversationRepository.
+func (g *GormConversationrepo) DeleteMemory(ctx context.Context, memoryID uuid.UUID) error {
+	// Start a transaction
+	tx := g.db.WithContext(ctx).Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// Delete associated memory chunks first (due to foreign key constraints)
+	if err := tx.Where("memory_id = ?", memoryID).Delete(&MemoryChunkEntity{}).Error; err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to delete memory chunks: %v", err)
+	}
+
+	// Delete the main memory entity
+	result := tx.Where("id = ?", memoryID).Delete(&MemoryEntity{})
+	if result.Error != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to delete memory: %v", result.Error)
+	}
+
+	// Check if memory was found and deleted
+	if result.RowsAffected == 0 {
+		tx.Rollback()
+		return fmt.Errorf("memory with ID %s not found", memoryID)
+	}
+
+	// Commit the transaction
+	if err := tx.Commit().Error; err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // CreateMessage implements types.ConversationRepository.
 func (g *GormConversationrepo) CreateMessage(ctx context.Context, userId uuid.UUID, msg types.Message) (*types.Message, error) {
 	lmsg := MessageEntity{}

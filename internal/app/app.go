@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-redis/redis"
+	"github.com/xpanvictor/xarvis/internal/app/toolsetup"
 	"github.com/xpanvictor/xarvis/internal/config"
 	"github.com/xpanvictor/xarvis/internal/domains/conversation"
 	"github.com/xpanvictor/xarvis/internal/domains/note"
@@ -24,10 +25,12 @@ import (
 	"github.com/xpanvictor/xarvis/internal/runtime/brain"
 	"github.com/xpanvictor/xarvis/internal/runtime/embedding"
 	"github.com/xpanvictor/xarvis/internal/server"
+	"github.com/xpanvictor/xarvis/internal/tools"
 	"github.com/xpanvictor/xarvis/pkg/Logger"
 	"github.com/xpanvictor/xarvis/pkg/assistant/router"
 	"github.com/xpanvictor/xarvis/pkg/io/registry"
 	memoryregistry "github.com/xpanvictor/xarvis/pkg/io/registry/memoryRegistry"
+	toolsystem "github.com/xpanvictor/xarvis/pkg/tool_system"
 	"gorm.io/gorm"
 )
 
@@ -49,9 +52,10 @@ type App struct {
 	// services
 	SchedulerService scheduler.SchedulerService
 	// system components
-	Processor     processor.Processor
-	SystemManager *sys_manager.SystemManager
-	ServerDeps    server.Dependencies
+	Processor          processor.Processor
+	SystemManager      *sys_manager.SystemManager
+	BrainSystemFactory *brain.BrainSystemFactory // Factory for creating brain systems with tools
+	ServerDeps         server.Dependencies
 }
 
 // NewApp creates a new application instance with all dependencies properly wired
@@ -85,7 +89,7 @@ func (a *App) setupDependencies() error {
 		return err
 	}
 
-	// 4. setup deps
+	// 4. setup deps structure
 	deps := server.NewServerDependencies(
 		a.ConversationRepo,
 		a.DeviceRegistry,
@@ -94,6 +98,7 @@ func (a *App) setupDependencies() error {
 		a.Logger,
 		a.Config,
 	)
+
 	// 5. Set up repositories
 	a.ConversationRepo = convoRepo.NewGormConvoRepo(a.DB, a.RC, time.Duration(a.Config.BrainConfig.MsgTTLMins*int64(time.Minute)), a.Embedder)
 	a.UserRepo = userRepo.NewGormUserRepo(a.DB)
@@ -101,16 +106,48 @@ func (a *App) setupDependencies() error {
 	a.NoteRepo = noteRepo.NewGormNoteRepo(a.DB)
 	a.TaskRepo = taskRepo.NewGormTaskRepo(a.DB)
 
-	// Set up processor if enabled
+	// 6. Create basic services needed for tools
+	// JWT settings from config
+	var jwtSecret string
+	var tokenTTLHours int
+	var tokenTTL time.Duration
+
+	jwtSecret = a.Config.Auth.JWTSecret
+	if jwtSecret == "" {
+		jwtSecret = "default-secret-key-change-in-production"
+		a.Logger.Warn("JWT secret not configured, using default (not secure for production)")
+	}
+
+	tokenTTLHours = a.Config.Auth.TokenTTLHours
+	if tokenTTLHours == 0 {
+		tokenTTLHours = 24 // default 24 hours
+	}
+	tokenTTL = time.Duration(tokenTTLHours) * time.Hour
+
+	// Create services that tools depend on
+	deps.UserService = user.NewUserService(a.UserRepo, a.Logger, jwtSecret, tokenTTL)
+	deps.ProjectService = project.NewProjectService(a.ProjectRepo, a.Logger)
+	deps.NoteService = note.NewNoteService(a.NoteRepo, a.Logger)
+	deps.TaskService = task.NewTaskService(a.TaskRepo, a.Logger)
+
+	// Store deps for tools setup
+	a.ServerDeps = deps
+
+	// 7. Set up tools with dependency injection (must be before services that need BrainSystemFactory)
+	if err := a.setupTools(); err != nil {
+		return err
+	}
+
+	// 8. Set up processor if enabled
 	if err := a.setupProcessor(); err != nil {
 		return err
 	}
 
 	// Set up scheduler service
 	schedulerConfig := scheduler.AsynqSchedulerConfig{
-		RedisAddr:     "localhost:6379", // Use default Redis address for now
-		RedisPassword: "",               // No password for local Redis
-		RedisDB:       0,                // Default Redis DB
+		RedisAddr:     a.Config.RedisDB.Addr, // Use the same Redis address from config
+		RedisPassword: a.Config.RedisDB.Pass, // Use the same Redis password from config
+		RedisDB:       0,                     // Default Redis DB
 		Concurrency:   10,
 		Queues: map[string]int{
 			"default": 6,
@@ -119,56 +156,20 @@ func (a *App) setupDependencies() error {
 		},
 	}
 
-	// Create brain system for scheduler similar to conversation service
-	piperURL, err := url.Parse(a.Config.Voice.TTSURL)
-	if err != nil {
-		return fmt.Errorf("failed to parse TTS URL: %w", err)
-	}
-
-	schedulerBrainSystem := brain.NewBrainSystem(
-		a.Config.BrainConfig,
-		a.LLMRouter,
-		a.DeviceRegistry,
-		piperURL,
-		a.Logger,
-	)
-
-	// Create scheduler with brain system
+	// Create scheduler with brain system factory
 	a.SchedulerService = scheduler.NewAsynqSchedulerService(
 		schedulerConfig,
 		a.Logger,
 		nil, // TaskService will be set later to avoid circular dependency
 		a.DeviceRegistry,
 		a.LLMRouter,
-		schedulerBrainSystem,
+		a.BrainSystemFactory,
 	)
 	a.TaskRepo = taskRepo.NewGormTaskRepo(a.DB)
 
-	// JWT settings from config
-	jwtSecret := a.Config.Auth.JWTSecret
-	if jwtSecret == "" {
-		jwtSecret = "default-secret-key-change-in-production"
-		a.Logger.Warn("JWT secret not configured, using default (not secure for production)")
-	}
-
-	tokenTTLHours := a.Config.Auth.TokenTTLHours
-	if tokenTTLHours == 0 {
-		tokenTTLHours = 24 // default 24 hours
-	}
-	tokenTTL := time.Duration(tokenTTLHours) * time.Hour
-
-	// add services
-	deps.UserService = user.NewUserService(a.UserRepo, a.Logger, jwtSecret, tokenTTL)
-	deps.ProjectService = project.NewProjectService(a.ProjectRepo, a.Logger)
-	deps.NoteService = note.NewNoteService(a.NoteRepo, a.Logger)
-
-	// Create task service and wire with scheduler
-	taskService := task.NewTaskService(a.TaskRepo, a.Logger)
-	deps.TaskService = taskService
-
 	// Set up circular dependency between task service and scheduler
 	schedulerAdapter := scheduler.NewTaskSchedulerAdapter(a.SchedulerService)
-	if taskServiceImpl, ok := taskService.(interface{ SetScheduler(task.TaskScheduler) }); ok {
+	if taskServiceImpl, ok := deps.TaskService.(interface{ SetScheduler(task.TaskScheduler) }); ok {
 		taskServiceImpl.SetScheduler(schedulerAdapter)
 	}
 
@@ -178,6 +179,7 @@ func (a *App) setupDependencies() error {
 		deps.DeviceRegistry,
 		deps.Logger,
 		a.ConversationRepo,
+		a.BrainSystemFactory,
 	) // Create conversation service
 
 	// Start the scheduler
@@ -199,14 +201,20 @@ func (a *App) setupDependencies() error {
 
 // setupEmbedder configures the embedder
 func (a *App) setupEmbedder() error {
-	// For now, hardcode TEI URL from docker-compose
-	// In production, this should come from config
-	teiURL := "http://embeddings-tei:80"
+	// Check if Gemini API key is configured
+	geminiAPIKey := a.Config.AssistantKeys.Gemini.APIKey
+	if geminiAPIKey == "" {
+		return fmt.Errorf("Gemini API key not configured in assistantKeys.gemini.gemini_api_key")
+	}
 
-	// Create TEI embedder
-	a.Embedder = embedding.NewTEIEmbedder(teiURL, a.Logger)
+	// Create Gemini embedder
+	geminiEmbedder, err := embedding.NewGeminiEmbedder(geminiAPIKey, a.Logger)
+	if err != nil {
+		return fmt.Errorf("failed to create Gemini embedder: %w", err)
+	}
 
-	a.Logger.Info("TEI embedder configured successfully")
+	a.Embedder = geminiEmbedder
+	a.Logger.Info("Gemini embedder configured successfully")
 	return nil
 }
 
@@ -306,6 +314,71 @@ func (a *App) setupSystemManager() error {
 	}
 
 	a.Logger.Info("System manager started successfully")
+	return nil
+}
+
+// setupTools initializes the tool system and creates a brain system factory
+func (a *App) setupTools() error {
+	a.Logger.Info("Setting up tools and brain system factory...")
+
+	// Create tool dependencies
+	toolDeps := &tools.ToolDependencies{
+		UserService:      a.ServerDeps.UserService,
+		ProjectService:   a.ServerDeps.ProjectService,
+		NoteService:      a.ServerDeps.NoteService,
+		TaskService:      a.ServerDeps.TaskService,
+		ConversationRepo: a.ConversationRepo,
+		Logger:           a.Logger,
+		TavilyAPIKey:     a.Config.ExternalAPIs.TavilyAPIKey,
+	}
+
+	// Create tool factory
+	toolFactory, err := tools.RegisterAllTools(toolDeps)
+	if err != nil {
+		return fmt.Errorf("failed to create tool factory: %w", err)
+	}
+
+	// Register tool builders
+	if err := toolsetup.RegisterToolBuilders(toolFactory); err != nil {
+		return fmt.Errorf("failed to register tool builders: %w", err)
+	}
+
+	// Build all tools
+	registeredTools, err := toolFactory.BuildAllTools()
+	if err != nil {
+		return fmt.Errorf("failed to build tools: %w", err)
+	}
+
+	// Create a tool registry and register all tools
+	masterToolRegistry := toolsystem.NewMemoryRegistry()
+	for _, tool := range registeredTools {
+		if err := masterToolRegistry.Register(tool); err != nil {
+			return fmt.Errorf("failed to register tool with master registry: %w", err)
+		}
+	}
+
+	// Register example tools as well (optional)
+	if err := toolsystem.RegisterExampleTools(masterToolRegistry); err != nil {
+		a.Logger.Warn("Failed to register example tools: %v", err)
+	}
+
+	// Parse piper URL for brain system factory
+	piperURL, err := url.Parse(a.Config.Voice.TTSURL)
+	if err != nil {
+		return fmt.Errorf("failed to parse TTS URL: %w", err)
+	}
+
+	// Create brain system factory with pre-configured tools
+	a.BrainSystemFactory = brain.NewBrainSystemFactory(
+		a.Config.BrainConfig,
+		a.LLMRouter,
+		a.DeviceRegistry,
+		piperURL,
+		a.Logger,
+		masterToolRegistry, // Pre-configured with all tools
+	)
+
+	a.Logger.Info("Successfully created brain system factory with %d tools", len(registeredTools))
 	return nil
 }
 

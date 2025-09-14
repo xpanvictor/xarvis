@@ -90,6 +90,10 @@ type ProcessorConfig struct {
 	Enabled      bool   `mapstructure:"enabled"`
 }
 
+type ExternalAPIsConfig struct {
+	TavilyAPIKey string `mapstructure:"tavily_api_key"`
+}
+
 type Settings struct {
 	DB            DBConfig         `mapstructure:"database"`
 	RedisDB       RedisConfig      `mapstructure:"redis"`
@@ -102,6 +106,7 @@ type Settings struct {
 	Auth          AuthConfig          `mapstructure:"auth"`
 	SystemManager SystemManagerConfig `mapstructure:"system_manager"`
 	Processor     ProcessorConfig     `mapstructure:"processor"`
+	ExternalAPIs  ExternalAPIsConfig  `mapstructure:"external_apis"`
 }
 
 func Load() (*Settings, error) {

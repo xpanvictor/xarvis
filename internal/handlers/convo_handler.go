@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/xpanvictor/xarvis/internal/constants/prompts"
 	"github.com/xpanvictor/xarvis/internal/domains/conversation"
 	"github.com/xpanvictor/xarvis/internal/domains/user"
@@ -146,6 +147,96 @@ func (h *ConversationHandler) CreateMemory(c *gin.Context) {
 	})
 }
 
+// SearchMemories searches for memories based on query and optional filters
+// @Summary Search user memories
+// @Description Searches for memories belonging to the authenticated user based on query and optional filters
+// @Tags Conversation
+// @Accept json
+// @Produce json
+// @Param request body MemorySearchRequest true "Memory search parameters"
+// @Success 200 {object} MemoriesResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Security BearerAuth
+// @Router /conversation/memories/search [post]
+func (h *ConversationHandler) SearchMemories(c *gin.Context) {
+	UserInfo, ok := ExtractUserInfo(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "Unauthorized"})
+		return
+	}
+
+	var searchReq MemorySearchRequest
+	if err := c.ShouldBindJSON(&searchReq); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error:   "Invalid request data",
+			Details: err.Error(),
+		})
+		return
+	}
+
+	// Set default limit if not specified
+	if searchReq.Limit <= 0 {
+		searchReq.Limit = 50 // Default to 50 memories
+	}
+
+	memories, err := h.convoService.SearchMemories(c, UserInfo.UserID, searchReq.Query, searchReq.Type, searchReq.Limit)
+	if err != nil {
+		h.logger.Errorf("search memories error: %v", err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Internal server error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, MemoriesResponse{
+		Memories: memories,
+		Count:    len(memories),
+	})
+}
+
+// DeleteMemory deletes a specific memory by ID
+// @Summary Delete a memory
+// @Description Deletes a specific memory belonging to the authenticated user
+// @Tags Conversation
+// @Param id path string true "Memory ID"
+// @Success 204 "No Content"
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Security BearerAuth
+// @Router /conversation/memories/{id} [delete]
+func (h *ConversationHandler) DeleteMemory(c *gin.Context) {
+	UserInfo, ok := ExtractUserInfo(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "Unauthorized"})
+		return
+	}
+
+	memoryIDStr := c.Param("id")
+	memoryID, err := uuid.Parse(memoryIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error:   "Invalid memory ID format",
+			Details: err.Error(),
+		})
+		return
+	}
+
+	err = h.convoService.DeleteMemory(c, UserInfo.UserID, memoryID)
+	if err != nil {
+		h.logger.Errorf("delete memory error: %v", err)
+		if err.Error() == "memory with ID "+memoryIDStr+" not found" {
+			c.JSON(http.StatusNotFound, ErrorResponse{Error: "Memory not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Internal server error"})
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
 // RegisterConversationRoutes registers all conversation-related routes
 func (h *ConversationHandler) RegisterConversationRoutes(r *gin.RouterGroup, userService user.UserService) {
 	// Protected routes (authentication required)
@@ -154,6 +245,8 @@ func (h *ConversationHandler) RegisterConversationRoutes(r *gin.RouterGroup, use
 	{
 		protected.POST("/message", h.ProcessMessage)
 		protected.POST("/memory", h.CreateMemory)
+		protected.POST("/memories/search", h.SearchMemories)
+		protected.DELETE("/memories/:id", h.DeleteMemory)
 		protected.GET("", h.RetrieveConversation)
 	}
 }

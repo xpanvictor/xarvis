@@ -18,4 +18,5 @@ type ConversationRepository interface {
 	// Memories
 	FindMemories(ctx context.Context, conversationID uuid.UUID, msr types.MemorySearchRequest) ([]types.Memory, error)
 	CreateMemory(ctx context.Context, conversationID uuid.UUID, m types.Memory) (*types.Memory, error)
+	DeleteMemory(ctx context.Context, memoryID uuid.UUID) error
 }

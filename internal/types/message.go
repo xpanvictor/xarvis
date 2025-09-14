@@ -111,6 +111,7 @@ type ConversationRepository interface {
 	// Memories
 	FindMemories(ctx context.Context, conversationID uuid.UUID, msr MemorySearchRequest) ([]Memory, error)
 	CreateMemory(ctx context.Context, conversationID uuid.UUID, m Memory) (*Memory, error)
+	DeleteMemory(ctx context.Context, memoryID uuid.UUID) error
 }
 
 // Legacy conversion method - will be removed when assistant types are removed

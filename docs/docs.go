@@ -634,6 +634,115 @@ const docTemplate = `{
                 }
             }
         },
+        "/conversation/memories/search": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Searches for memories belonging to the authenticated user based on query and optional filters",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Conversation"
+                ],
+                "summary": "Search user memories",
+                "parameters": [
+                    {
+                        "description": "Memory search parameters",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.MemorySearchRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.MemoriesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/conversation/memories/{id}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Deletes a specific memory belonging to the authenticated user",
+                "tags": [
+                    "Conversation"
+                ],
+                "summary": "Delete a memory",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Memory ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/conversation/memory": {
             "post": {
                 "security": [
@@ -3289,11 +3398,49 @@ const docTemplate = `{
                 }
             }
         },
+        "handlers.MemoriesResponse": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "memories": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/types.Memory"
+                    }
+                }
+            }
+        },
         "handlers.MemoryResponse": {
             "type": "object",
             "properties": {
                 "memory": {
                     "$ref": "#/definitions/types.Memory"
+                }
+            }
+        },
+        "handlers.MemorySearchRequest": {
+            "type": "object",
+            "required": [
+                "query"
+            ],
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "example": 10
+                },
+                "query": {
+                    "type": "string",
+                    "example": "remember something"
+                },
+                "type": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/types.MemoryType"
+                        }
+                    ],
+                    "example": "episodic"
                 }
             }
         },

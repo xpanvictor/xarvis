@@ -114,10 +114,34 @@ definitions:
       user:
         $ref: '#/definitions/user.UserResponse'
     type: object
+  handlers.MemoriesResponse:
+    properties:
+      count:
+        type: integer
+      memories:
+        items:
+          $ref: '#/definitions/types.Memory'
+        type: array
+    type: object
   handlers.MemoryResponse:
     properties:
       memory:
         $ref: '#/definitions/types.Memory'
+    type: object
+  handlers.MemorySearchRequest:
+    properties:
+      limit:
+        example: 10
+        type: integer
+      query:
+        example: remember something
+        type: string
+      type:
+        allOf:
+        - $ref: '#/definitions/types.MemoryType'
+        example: episodic
+    required:
+    - query
     type: object
   handlers.MessageResponse:
     properties:
@@ -1320,6 +1344,76 @@ paths:
       security:
       - BearerAuth: []
       summary: Retrieve user conversation
+      tags:
+      - Conversation
+  /conversation/memories/{id}:
+    delete:
+      description: Deletes a specific memory belonging to the authenticated user
+      parameters:
+      - description: Memory ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a memory
+      tags:
+      - Conversation
+  /conversation/memories/search:
+    post:
+      consumes:
+      - application/json
+      description: Searches for memories belonging to the authenticated user based
+        on query and optional filters
+      parameters:
+      - description: Memory search parameters
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.MemorySearchRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.MemoriesResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Search user memories
       tags:
       - Conversation
   /conversation/memory:

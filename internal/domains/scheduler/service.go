@@ -25,9 +25,9 @@ type AsynqSchedulerService struct {
 	brainIntegration BrainSystemIntegration
 
 	// Dependencies for brain system integration
-	deviceRegistry registry.DeviceRegistry
-	llmRouter      *router.Mux
-	brainSystem    *brain.BrainSystem
+	deviceRegistry     registry.DeviceRegistry
+	llmRouter          *router.Mux
+	brainSystemFactory *brain.BrainSystemFactory
 }
 
 // AsynqSchedulerConfig holds configuration for the scheduler
@@ -46,7 +46,7 @@ func NewAsynqSchedulerService(
 	taskService task.TaskService,
 	deviceRegistry registry.DeviceRegistry,
 	llmRouter *router.Mux,
-	brainSystem *brain.BrainSystem,
+	brainSystemFactory *brain.BrainSystemFactory,
 ) *AsynqSchedulerService {
 
 	redisOpt := asynq.RedisClientOpt{
@@ -66,18 +66,20 @@ func NewAsynqSchedulerService(
 	mux := asynq.NewServeMux()
 
 	service := &AsynqSchedulerService{
-		client:         client,
-		server:         server,
-		mux:            mux,
-		logger:         logger,
-		taskService:    taskService,
-		deviceRegistry: deviceRegistry,
-		llmRouter:      llmRouter,
-		brainSystem:    brainSystem,
+		client:             client,
+		server:             server,
+		mux:                mux,
+		logger:             logger,
+		taskService:        taskService,
+		deviceRegistry:     deviceRegistry,
+		llmRouter:          llmRouter,
+		brainSystemFactory: brainSystemFactory,
 	}
 
-	// Initialize brain integration
-	service.brainIntegration = NewBrainIntegration(brainSystem, deviceRegistry, logger)
+	// Initialize brain integration with a temp brain system for initial setup
+	// In practice, brain systems will be created per task execution
+	tempBrainSystem := brainSystemFactory.CreateBrainSystem()
+	service.brainIntegration = NewBrainIntegration(tempBrainSystem, deviceRegistry, logger)
 
 	// Register job handlers
 	service.registerHandlers()
@@ -334,8 +336,12 @@ func (s *AsynqSchedulerService) processTaskExecution(ctx context.Context, payloa
 	// Convert to domain task
 	domainTask := s.convertResponseToTask(taskResp)
 
+	// Create a dedicated brain system for this user's task execution
+	userBrainSystem := s.brainSystemFactory.CreateBrainSystem()
+	brainIntegration := NewBrainIntegration(userBrainSystem, s.deviceRegistry, s.logger)
+
 	// Execute task using brain system
-	result, err := s.brainIntegration.ExecuteTaskWithBrain(ctx, domainTask, payload.UserID, payload.SessionID, payload.JobType)
+	result, err := brainIntegration.ExecuteTaskWithBrain(ctx, domainTask, payload.UserID, payload.SessionID, payload.JobType)
 	if err != nil {
 		return &TaskExecutionResult{
 			TaskID:     payload.TaskID,
@@ -374,8 +380,12 @@ func (s *AsynqSchedulerService) processRecurringTask(ctx context.Context, payloa
 	// Convert to domain task
 	domainTask := s.convertResponseToTask(taskResp)
 
+	// Create a dedicated brain system for this user's task execution
+	userBrainSystem := s.brainSystemFactory.CreateBrainSystem()
+	brainIntegration := NewBrainIntegration(userBrainSystem, s.deviceRegistry, s.logger)
+
 	// Execute task using brain system
-	result, err := s.brainIntegration.ExecuteTaskWithBrain(ctx, domainTask, payload.UserID, payload.SessionID, payload.JobType)
+	result, err := brainIntegration.ExecuteTaskWithBrain(ctx, domainTask, payload.UserID, payload.SessionID, payload.JobType)
 	if err != nil {
 		return &TaskExecutionResult{
 			TaskID:     payload.TaskID,
@@ -414,8 +424,12 @@ func (s *AsynqSchedulerService) processTaskReminder(ctx context.Context, payload
 	// Convert to domain task
 	domainTask := s.convertResponseToTask(taskResp)
 
+	// Create a dedicated brain system for this user's task execution
+	userBrainSystem := s.brainSystemFactory.CreateBrainSystem()
+	brainIntegration := NewBrainIntegration(userBrainSystem, s.deviceRegistry, s.logger)
+
 	// Send reminder using brain system
-	result, err := s.brainIntegration.ExecuteTaskWithBrain(ctx, domainTask, payload.UserID, payload.SessionID, payload.JobType)
+	result, err := brainIntegration.ExecuteTaskWithBrain(ctx, domainTask, payload.UserID, payload.SessionID, payload.JobType)
 	if err != nil {
 		return &TaskExecutionResult{
 			TaskID:     payload.TaskID,

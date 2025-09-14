@@ -2,6 +2,7 @@ package brain
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 
 	"github.com/google/uuid"
@@ -39,7 +40,7 @@ func NewBrainSystem(
 	toolRegistry := toolsystem.NewMemoryRegistry()
 	executor := toolsystem.NewExecutor()
 
-	// Register example tools (optional)
+	// Register example tools (optional, can be disabled in production)
 	if err := toolsystem.RegisterExampleTools(toolRegistry); err != nil {
 		logger.Error("Failed to register example tools: %v", err)
 	}
@@ -60,6 +61,38 @@ func NewBrainSystem(
 		Pipeline: &pipeline,
 		logger:   logger,
 	}
+}
+
+// RegisterAppTools registers application-specific tools from the tool factory
+// This function is called from app setup to avoid import cycles
+func (bs *BrainSystem) RegisterAppTools(toolFactory ToolFactory) error {
+	if toolFactory == nil {
+		bs.logger.Warn("Tool factory is nil, skipping app tools registration")
+		return nil
+	}
+
+	// Get all built tools from the factory
+	tools := toolFactory.GetTools()
+	if len(tools) == 0 {
+		bs.logger.Info("No tools available from factory")
+		return nil
+	}
+
+	// Register each tool with the brain registry
+	for name, tool := range tools {
+		if err := bs.Registry.Register(tool); err != nil {
+			return fmt.Errorf("failed to register tool '%s': %w", name, err)
+		}
+		bs.logger.Info("Registered tool: %s", name)
+	}
+
+	bs.logger.Info("Successfully registered %d application tools", len(tools))
+	return nil
+}
+
+// ToolFactory interface to avoid import cycle
+type ToolFactory interface {
+	GetTools() map[string]toolsystem.Tool
 }
 
 func (bs *BrainSystem) ProcessMessage(
