@@ -85,17 +85,17 @@ type SystemManagerConfig struct {
 }
 
 type ProcessorConfig struct {
-	GeminiAPIKey  string `mapstructure:"gemini_api_key"`
-	GeminiModel   string `mapstructure:"gemini_model"`
-	Enabled       bool   `mapstructure:"enabled"`
+	GeminiAPIKey string `mapstructure:"gemini_api_key"`
+	GeminiModel  string `mapstructure:"gemini_model"`
+	Enabled      bool   `mapstructure:"enabled"`
 }
 
 type Settings struct {
-	DB            DBConfig            `mapstructure:"database"`
-	RedisDB       RedisConfig         `mapstructure:"redis"`
-	AssistantKeys AssistantKeysObj    `mapstructure:"assistantKeys"`
-	Env           string              `mapstructure:"env"`
-	Debug         bool                `mapstructure:"debug" default:"false"`
+	DB            DBConfig         `mapstructure:"database"`
+	RedisDB       RedisConfig      `mapstructure:"redis"`
+	AssistantKeys AssistantKeysObj `mapstructure:"assistantKeys"`
+	Env           string           `mapstructure:"env"`
+	Debug         bool             `mapstructure:"debug" default:"false"`
 	BrainConfig   BrainConfig
 	SysModels     SysModelsConfig     `mapstructure:"sys_models"`
 	Voice         VoiceConfig         `mapstructure:"voice"`

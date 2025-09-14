@@ -71,7 +71,7 @@ type TaskService interface {
 	// Execution operations (for scheduler)
 	GetTasksToExecute(ctx context.Context, beforeTime time.Time, limit int) ([]TaskResponse, error)
 	ExecuteTask(ctx context.Context, taskID string) error
-	
+
 	// Scheduler integration
 	SetScheduler(scheduler TaskScheduler)
 }

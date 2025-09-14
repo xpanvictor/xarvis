@@ -13,30 +13,30 @@ import (
 type JobType string
 
 const (
-	JobTypeTaskExecution   JobType = "task_execution"
-	JobTypeRecurringTask   JobType = "recurring_task"
-	JobTypeTaskReminder    JobType = "task_reminder"
-	JobTypeTaskDeadline    JobType = "task_deadline"
+	JobTypeTaskExecution JobType = "task_execution"
+	JobTypeRecurringTask JobType = "recurring_task"
+	JobTypeTaskReminder  JobType = "task_reminder"
+	JobTypeTaskDeadline  JobType = "task_deadline"
 )
 
 // JobPayload represents the data structure for scheduled jobs
 type JobPayload struct {
-	JobType    JobType           `json:"job_type"`
-	TaskID     uuid.UUID         `json:"task_id"`
-	UserID     uuid.UUID         `json:"user_id"`
-	SessionID  uuid.UUID         `json:"session_id,omitempty"`
-	ExecuteAt  time.Time         `json:"execute_at"`
-	Metadata   map[string]interface{} `json:"metadata,omitempty"`
+	JobType   JobType                `json:"job_type"`
+	TaskID    uuid.UUID              `json:"task_id"`
+	UserID    uuid.UUID              `json:"user_id"`
+	SessionID uuid.UUID              `json:"session_id,omitempty"`
+	ExecuteAt time.Time              `json:"execute_at"`
+	Metadata  map[string]interface{} `json:"metadata,omitempty"`
 }
 
 // TaskExecutionRequest represents a request to execute a task
 type TaskExecutionRequest struct {
-	Task       *task.Task                `json:"task"`
-	UserID     uuid.UUID                 `json:"user_id"`
-	SessionID  uuid.UUID                 `json:"session_id,omitempty"`
-	ExecuteAt  time.Time                 `json:"execute_at"`
-	JobType    JobType                   `json:"job_type"`
-	Metadata   map[string]interface{}    `json:"metadata,omitempty"`
+	Task      *task.Task             `json:"task"`
+	UserID    uuid.UUID              `json:"user_id"`
+	SessionID uuid.UUID              `json:"session_id,omitempty"`
+	ExecuteAt time.Time              `json:"execute_at"`
+	JobType   JobType                `json:"job_type"`
+	Metadata  map[string]interface{} `json:"metadata,omitempty"`
 }
 
 // TaskExecutionResult represents the result of task execution
@@ -57,12 +57,12 @@ type SchedulerService interface {
 	ScheduleTaskExecution(ctx context.Context, taskID, userID uuid.UUID, executeAt time.Time) error
 	ScheduleTaskReminder(ctx context.Context, taskID, userID uuid.UUID, remindAt time.Time) error
 	ScheduleRecurringTask(ctx context.Context, taskID, userID uuid.UUID, nextRun time.Time) error
-	
+
 	// Job management methods
 	CancelScheduledTask(ctx context.Context, taskID uuid.UUID) error
 	RescheduleTask(ctx context.Context, taskID uuid.UUID, newTime time.Time) error
 	GetScheduledJobs(ctx context.Context, userID uuid.UUID) ([]JobPayload, error)
-	
+
 	// Lifecycle methods
 	Start(ctx context.Context) error
 	Stop(ctx context.Context) error

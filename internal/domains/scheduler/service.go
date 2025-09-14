@@ -17,13 +17,13 @@ import (
 
 // AsynqSchedulerService implements SchedulerService using asynq
 type AsynqSchedulerService struct {
-	client        *asynq.Client
-	server        *asynq.Server
-	mux           *asynq.ServeMux
-	logger        *Logger.Logger
-	taskService   task.TaskService
+	client           *asynq.Client
+	server           *asynq.Server
+	mux              *asynq.ServeMux
+	logger           *Logger.Logger
+	taskService      task.TaskService
 	brainIntegration BrainSystemIntegration
-	
+
 	// Dependencies for brain system integration
 	deviceRegistry registry.DeviceRegistry
 	llmRouter      *router.Mux
@@ -48,23 +48,23 @@ func NewAsynqSchedulerService(
 	llmRouter *router.Mux,
 	brainSystem *brain.BrainSystem,
 ) *AsynqSchedulerService {
-	
+
 	redisOpt := asynq.RedisClientOpt{
 		Addr:     config.RedisAddr,
 		Password: config.RedisPassword,
 		DB:       config.RedisDB,
 	}
-	
+
 	client := asynq.NewClient(redisOpt)
-	
+
 	server := asynq.NewServer(redisOpt, asynq.Config{
 		Concurrency: config.Concurrency,
 		Queues:      config.Queues,
 		Logger:      NewAsynqLogger(logger),
 	})
-	
+
 	mux := asynq.NewServeMux()
-	
+
 	service := &AsynqSchedulerService{
 		client:         client,
 		server:         server,
@@ -75,13 +75,13 @@ func NewAsynqSchedulerService(
 		llmRouter:      llmRouter,
 		brainSystem:    brainSystem,
 	}
-	
+
 	// Initialize brain integration
 	service.brainIntegration = NewBrainIntegration(brainSystem, deviceRegistry, logger)
-	
+
 	// Register job handlers
 	service.registerHandlers()
-	
+
 	return service
 }
 
@@ -103,25 +103,25 @@ func (s *AsynqSchedulerService) ScheduleTask(ctx context.Context, req *TaskExecu
 		ExecuteAt: req.ExecuteAt,
 		Metadata:  req.Metadata,
 	}
-	
+
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("failed to marshal job payload: %w", err)
 	}
-	
+
 	task := asynq.NewTask(string(req.JobType), payloadBytes)
-	
+
 	// Calculate delay from now to execution time
 	delay := time.Until(req.ExecuteAt)
-	
+
 	info, err := s.client.Enqueue(task, asynq.ProcessIn(delay))
 	if err != nil {
 		return fmt.Errorf("failed to enqueue task: %w", err)
 	}
-	
-	s.logger.Info(fmt.Sprintf("Scheduled task %s for execution at %s (queue: %s, id: %s)", 
+
+	s.logger.Info(fmt.Sprintf("Scheduled task %s for execution at %s (queue: %s, id: %s)",
 		req.Task.ID, req.ExecuteAt.Format(time.RFC3339), info.Queue, info.ID))
-	
+
 	return nil
 }
 
@@ -132,17 +132,17 @@ func (s *AsynqSchedulerService) ScheduleTaskExecution(ctx context.Context, taskI
 	if err != nil {
 		return fmt.Errorf("failed to get task: %w", err)
 	}
-	
+
 	// Convert to domain task
 	domainTask := s.convertResponseToTask(taskResp)
-	
+
 	req := &TaskExecutionRequest{
 		Task:      domainTask,
 		UserID:    userID,
 		ExecuteAt: executeAt,
 		JobType:   JobTypeTaskExecution,
 	}
-	
+
 	return s.ScheduleTask(ctx, req)
 }
 
@@ -152,16 +152,16 @@ func (s *AsynqSchedulerService) ScheduleTaskReminder(ctx context.Context, taskID
 	if err != nil {
 		return fmt.Errorf("failed to get task: %w", err)
 	}
-	
+
 	domainTask := s.convertResponseToTask(taskResp)
-	
+
 	req := &TaskExecutionRequest{
 		Task:      domainTask,
 		UserID:    userID,
 		ExecuteAt: remindAt,
 		JobType:   JobTypeTaskReminder,
 	}
-	
+
 	return s.ScheduleTask(ctx, req)
 }
 
@@ -171,16 +171,16 @@ func (s *AsynqSchedulerService) ScheduleRecurringTask(ctx context.Context, taskI
 	if err != nil {
 		return fmt.Errorf("failed to get task: %w", err)
 	}
-	
+
 	domainTask := s.convertResponseToTask(taskResp)
-	
+
 	req := &TaskExecutionRequest{
 		Task:      domainTask,
 		UserID:    userID,
 		ExecuteAt: nextRun,
 		JobType:   JobTypeRecurringTask,
 	}
-	
+
 	return s.ScheduleTask(ctx, req)
 }
 
@@ -209,13 +209,13 @@ func (s *AsynqSchedulerService) GetScheduledJobs(ctx context.Context, userID uui
 // Start starts the scheduler server
 func (s *AsynqSchedulerService) Start(ctx context.Context) error {
 	s.logger.Info("Starting asynq scheduler server...")
-	
+
 	go func() {
 		if err := s.server.Run(s.mux); err != nil {
 			s.logger.Error(fmt.Sprintf("Asynq server error: %v", err))
 		}
 	}()
-	
+
 	s.logger.Info("Asynq scheduler server started successfully")
 	return nil
 }
@@ -223,10 +223,10 @@ func (s *AsynqSchedulerService) Start(ctx context.Context) error {
 // Stop stops the scheduler server
 func (s *AsynqSchedulerService) Stop(ctx context.Context) error {
 	s.logger.Info("Stopping asynq scheduler server...")
-	
+
 	s.server.Shutdown()
 	s.client.Close()
-	
+
 	s.logger.Info("Asynq scheduler server stopped")
 	return nil
 }
@@ -246,13 +246,13 @@ func (s *AsynqSchedulerService) handleTaskExecution(ctx context.Context, t *asyn
 	if err := json.Unmarshal(t.Payload(), &payload); err != nil {
 		return fmt.Errorf("failed to unmarshal task execution payload: %w", err)
 	}
-	
+
 	result, err := s.processTaskExecution(ctx, &payload)
 	if err != nil {
 		s.logger.Error(fmt.Sprintf("Task execution failed: %v", err))
 		return err
 	}
-	
+
 	s.logger.Info(fmt.Sprintf("Task execution completed: %s", result.TaskID))
 	return nil
 }
@@ -263,13 +263,13 @@ func (s *AsynqSchedulerService) handleRecurringTask(ctx context.Context, t *asyn
 	if err := json.Unmarshal(t.Payload(), &payload); err != nil {
 		return fmt.Errorf("failed to unmarshal recurring task payload: %w", err)
 	}
-	
+
 	result, err := s.processRecurringTask(ctx, &payload)
 	if err != nil {
 		s.logger.Error(fmt.Sprintf("Recurring task processing failed: %v", err))
 		return err
 	}
-	
+
 	// Schedule next occurrence if applicable
 	if result.NextRun != nil {
 		err = s.ScheduleRecurringTask(ctx, payload.TaskID, payload.UserID, *result.NextRun)
@@ -277,7 +277,7 @@ func (s *AsynqSchedulerService) handleRecurringTask(ctx context.Context, t *asyn
 			s.logger.Error(fmt.Sprintf("Failed to schedule next occurrence: %v", err))
 		}
 	}
-	
+
 	s.logger.Info(fmt.Sprintf("Recurring task processed: %s", result.TaskID))
 	return nil
 }
@@ -288,13 +288,13 @@ func (s *AsynqSchedulerService) handleTaskReminder(ctx context.Context, t *asynq
 	if err := json.Unmarshal(t.Payload(), &payload); err != nil {
 		return fmt.Errorf("failed to unmarshal task reminder payload: %w", err)
 	}
-	
+
 	result, err := s.processTaskReminder(ctx, &payload)
 	if err != nil {
 		s.logger.Error(fmt.Sprintf("Task reminder failed: %v", err))
 		return err
 	}
-	
+
 	s.logger.Info(fmt.Sprintf("Task reminder sent: %s", result.TaskID))
 	return nil
 }
@@ -305,18 +305,18 @@ func (s *AsynqSchedulerService) handleTaskDeadline(ctx context.Context, t *asynq
 	if err := json.Unmarshal(t.Payload(), &payload); err != nil {
 		return fmt.Errorf("failed to unmarshal task deadline payload: %w", err)
 	}
-	
+
 	// Process as a reminder but mark as deadline
 	payload.Metadata = map[string]interface{}{
 		"type": "deadline",
 	}
-	
+
 	result, err := s.processTaskReminder(ctx, &payload)
 	if err != nil {
 		s.logger.Error(fmt.Sprintf("Task deadline notification failed: %v", err))
 		return err
 	}
-	
+
 	s.logger.Info(fmt.Sprintf("Task deadline notification sent: %s", result.TaskID))
 	return nil
 }

@@ -42,10 +42,10 @@ func (bi *BrainIntegration) ExecuteTaskWithBrain(
 	userID, sessionID uuid.UUID,
 	jobType JobType,
 ) (*types.Message, error) {
-	
+
 	// Create system messages with combined prompts
 	systemMessages := bi.createSystemMessages(task, jobType)
-	
+
 	// Create task execution message
 	var executionTime time.Time
 	if task.DueAt != nil {
@@ -53,7 +53,7 @@ func (bi *BrainIntegration) ExecuteTaskWithBrain(
 	} else {
 		executionTime = time.Now()
 	}
-	
+
 	taskMessage := types.Message{
 		Id:        uuid.New(),
 		UserId:    userID,
@@ -62,16 +62,16 @@ func (bi *BrainIntegration) ExecuteTaskWithBrain(
 		MsgRole:   assistant.USER,
 		Tags:      []string{"task_execution", string(jobType)},
 	}
-	
+
 	// Combine all messages
 	messages := append(systemMessages, taskMessage)
-	
+
 	// Process through brain system
 	result, err := bi.brainSystem.ProcessMessage(ctx, userID, sessionID, messages)
 	if err != nil {
 		return nil, fmt.Errorf("brain system task execution failed: %w", err)
 	}
-	
+
 	bi.logger.Info(fmt.Sprintf("Task %s executed successfully via brain system", task.ID))
 	return result, nil
 }
@@ -83,7 +83,7 @@ func (bi *BrainIntegration) SendTaskNotification(
 	message string,
 	taskID uuid.UUID,
 ) error {
-	
+
 	// Create notification message
 	notificationMessage := types.Message{
 		Id:        uuid.New(),
@@ -93,13 +93,13 @@ func (bi *BrainIntegration) SendTaskNotification(
 		MsgRole:   assistant.ASSISTANT,
 		Tags:      []string{"task_notification"},
 	}
-	
+
 	// Send through brain system with streaming to push to connected devices
 	err := bi.brainSystem.ProcessMessageWithStreaming(ctx, userID, sessionID, []types.Message{notificationMessage}, false)
 	if err != nil {
 		return fmt.Errorf("failed to send task notification: %w", err)
 	}
-	
+
 	bi.logger.Info(fmt.Sprintf("Task notification sent for task %s to user %s", taskID, userID))
 	return nil
 }
@@ -107,7 +107,7 @@ func (bi *BrainIntegration) SendTaskNotification(
 // createSystemMessages creates system messages with combined default and task prompts
 func (bi *BrainIntegration) createSystemMessages(task *task.Task, jobType JobType) []types.Message {
 	var systemMessages []types.Message
-	
+
 	// Add default system prompt
 	defaultPrompt := prompts.DEFAULT_PROMPT.Items[prompts.DEFAULT_PROMPT.CurrentVersion]
 	systemMessages = append(systemMessages, types.Message{
@@ -118,7 +118,7 @@ func (bi *BrainIntegration) createSystemMessages(task *task.Task, jobType JobTyp
 		MsgRole:   assistant.SYSTEM,
 		Tags:      []string{"system_prompt", "default"},
 	})
-	
+
 	// Add task-specific system prompt
 	taskPrompt := prompts.TASK_PROMPT.Items[prompts.TASK_PROMPT.CurrentVersion]
 	systemMessages = append(systemMessages, types.Message{
@@ -129,7 +129,7 @@ func (bi *BrainIntegration) createSystemMessages(task *task.Task, jobType JobTyp
 		MsgRole:   assistant.SYSTEM,
 		Tags:      []string{"system_prompt", "task", string(jobType)},
 	})
-	
+
 	return systemMessages
 }
 
@@ -141,7 +141,7 @@ func (bi *BrainIntegration) createTaskExecutionMessage(task *task.Task, jobType 
 	} else {
 		dueDate = "No deadline set"
 	}
-	
+
 	switch jobType {
 	case JobTypeTaskExecution:
 		return fmt.Sprintf("Execute the task: %s\n\nDescription: %s\n\nDue: %s\n\nStatus: %s",

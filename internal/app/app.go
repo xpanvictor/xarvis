@@ -49,9 +49,9 @@ type App struct {
 	// services
 	SchedulerService scheduler.SchedulerService
 	// system components
-	Processor       processor.Processor
-	SystemManager   *sys_manager.SystemManager
-	ServerDeps      server.Dependencies
+	Processor     processor.Processor
+	SystemManager *sys_manager.SystemManager
+	ServerDeps    server.Dependencies
 }
 
 // NewApp creates a new application instance with all dependencies properly wired
@@ -124,7 +124,7 @@ func (a *App) setupDependencies() error {
 	if err != nil {
 		return fmt.Errorf("failed to parse TTS URL: %w", err)
 	}
-	
+
 	schedulerBrainSystem := brain.NewBrainSystem(
 		a.Config.BrainConfig,
 		a.LLMRouter,
@@ -161,17 +161,17 @@ func (a *App) setupDependencies() error {
 	deps.UserService = user.NewUserService(a.UserRepo, a.Logger, jwtSecret, tokenTTL)
 	deps.ProjectService = project.NewProjectService(a.ProjectRepo, a.Logger)
 	deps.NoteService = note.NewNoteService(a.NoteRepo, a.Logger)
-	
+
 	// Create task service and wire with scheduler
 	taskService := task.NewTaskService(a.TaskRepo, a.Logger)
 	deps.TaskService = taskService
-	
+
 	// Set up circular dependency between task service and scheduler
 	schedulerAdapter := scheduler.NewTaskSchedulerAdapter(a.SchedulerService)
 	if taskServiceImpl, ok := taskService.(interface{ SetScheduler(task.TaskScheduler) }); ok {
 		taskServiceImpl.SetScheduler(schedulerAdapter)
 	}
-	
+
 	deps.ConversationService = conversation.New(
 		*deps.Configs,
 		deps.Mux,
@@ -179,7 +179,7 @@ func (a *App) setupDependencies() error {
 		deps.Logger,
 		a.ConversationRepo,
 	) // Create conversation service
-	
+
 	// Start the scheduler
 	go func() {
 		if err := a.SchedulerService.Start(context.Background()); err != nil {
@@ -236,26 +236,26 @@ func (a *App) setupProcessor() error {
 		a.Logger.Info("Processor disabled in configuration")
 		return nil
 	}
-	
+
 	// Set up Gemini processor
 	geminiConfig := processor.GeminiConfig{
 		APIKey:    a.Config.Processor.GeminiAPIKey,
 		ModelName: a.Config.Processor.GeminiModel,
 	}
-	
+
 	if geminiConfig.APIKey == "" {
 		a.Logger.Warn("Gemini API key not configured, processor will not be available")
 		return nil
 	}
-	
+
 	geminiProcessor, err := processor.NewGeminiProcessor(geminiConfig, a.Logger)
 	if err != nil {
 		return fmt.Errorf("failed to create Gemini processor: %w", err)
 	}
-	
+
 	a.Processor = geminiProcessor
 	a.Logger.Info("Gemini processor configured successfully")
-	
+
 	return nil
 }
 
@@ -265,10 +265,10 @@ func (a *App) setupSystemManager() error {
 		a.Logger.Info("System manager disabled in configuration")
 		return nil
 	}
-	
+
 	// Create system manager
 	a.SystemManager = sys_manager.NewSystemManager(a.Logger)
-	
+
 	// Set up message summarizer task if processor is available
 	if a.Processor != nil {
 		// Parse interval from config
@@ -276,16 +276,16 @@ func (a *App) setupSystemManager() error {
 		if a.Config.SystemManager.MessageSummarizerInterval != "" {
 			parsedInterval, err := time.ParseDuration(a.Config.SystemManager.MessageSummarizerInterval)
 			if err != nil {
-				a.Logger.Warn(fmt.Sprintf("Invalid message summarizer interval '%s', using default 3m", 
+				a.Logger.Warn(fmt.Sprintf("Invalid message summarizer interval '%s', using default 3m",
 					a.Config.SystemManager.MessageSummarizerInterval))
 			} else {
 				interval = parsedInterval
 			}
 		}
-		
+
 		// Create message summarizer
 		summarizer := convoRepo.NewMessageSummarizer(a.Processor, a.Logger, a.ConversationRepo)
-		
+
 		// Create and register the summarizer task
 		summarizerTask := sys_manager.NewMessageSummarizerTask(
 			summarizer,
@@ -293,18 +293,18 @@ func (a *App) setupSystemManager() error {
 			a.Logger,
 			interval,
 		)
-		
+
 		a.SystemManager.RegisterTask(summarizerTask)
 		a.Logger.Info(fmt.Sprintf("Message summarizer task registered with interval: %s", interval))
 	} else {
 		a.Logger.Warn("Processor not available, skipping message summarizer task")
 	}
-	
+
 	// Start the system manager
 	if err := a.SystemManager.Start(); err != nil {
 		return fmt.Errorf("failed to start system manager: %w", err)
 	}
-	
+
 	a.Logger.Info("System manager started successfully")
 	return nil
 }
@@ -312,28 +312,28 @@ func (a *App) setupSystemManager() error {
 // Shutdown gracefully stops all application components
 func (a *App) Shutdown(ctx context.Context) error {
 	a.Logger.Info("Shutting down application...")
-	
+
 	// Stop system manager if running
 	if a.SystemManager != nil && a.SystemManager.IsRunning() {
 		if err := a.SystemManager.Stop(); err != nil {
 			a.Logger.Error(fmt.Sprintf("Error stopping system manager: %v", err))
 		}
 	}
-	
+
 	// Stop scheduler service if running
 	if a.SchedulerService != nil {
 		if err := a.SchedulerService.Stop(ctx); err != nil {
 			a.Logger.Error(fmt.Sprintf("Error stopping scheduler service: %v", err))
 		}
 	}
-	
+
 	// Close processor if it has a close method
 	if processor, ok := a.Processor.(interface{ Close() error }); ok && processor != nil {
 		if err := processor.Close(); err != nil {
 			a.Logger.Error(fmt.Sprintf("Error closing processor: %v", err))
 		}
 	}
-	
+
 	a.Logger.Info("Application shutdown complete")
 	return nil
 }

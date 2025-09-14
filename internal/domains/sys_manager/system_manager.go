@@ -36,7 +36,7 @@ type SystemManager struct {
 // NewSystemManager creates a new system manager
 func NewSystemManager(logger *Logger.Logger) *SystemManager {
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	return &SystemManager{
 		tasks:  make([]SystemTask, 0),
 		logger: logger,
@@ -49,9 +49,9 @@ func NewSystemManager(logger *Logger.Logger) *SystemManager {
 func (sm *SystemManager) RegisterTask(task SystemTask) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
-	
+
 	sm.tasks = append(sm.tasks, task)
-	sm.logger.Info(fmt.Sprintf("Registered system task: %s (interval: %s)", 
+	sm.logger.Info(fmt.Sprintf("Registered system task: %s (interval: %s)",
 		task.GetName(), task.GetInterval()))
 }
 
@@ -59,20 +59,20 @@ func (sm *SystemManager) RegisterTask(task SystemTask) {
 func (sm *SystemManager) Start() error {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
-	
+
 	if sm.running {
 		return fmt.Errorf("system manager is already running")
 	}
-	
+
 	sm.running = true
 	sm.logger.Info(fmt.Sprintf("Starting system manager with %d tasks", len(sm.tasks)))
-	
+
 	// Start each task in its own goroutine with its own ticker
 	for _, task := range sm.tasks {
 		sm.wg.Add(1)
 		go sm.runTask(task)
 	}
-	
+
 	return nil
 }
 
@@ -80,17 +80,17 @@ func (sm *SystemManager) Start() error {
 func (sm *SystemManager) Stop() error {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
-	
+
 	if !sm.running {
 		return nil
 	}
-	
+
 	sm.logger.Info("Stopping system manager...")
 	sm.cancel()
 	sm.wg.Wait()
 	sm.running = false
 	sm.logger.Info("System manager stopped")
-	
+
 	return nil
 }
 
@@ -111,18 +111,18 @@ func (sm *SystemManager) GetTaskCount() int {
 // runTask executes a single task on its schedule
 func (sm *SystemManager) runTask(task SystemTask) {
 	defer sm.wg.Done()
-	
+
 	taskName := task.GetName()
 	interval := task.GetInterval()
-	
+
 	sm.logger.Info(fmt.Sprintf("Starting task scheduler for: %s", taskName))
-	
+
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
-	
+
 	// Execute immediately on start
 	sm.executeTask(task)
-	
+
 	// Then execute on schedule
 	for {
 		select {
@@ -139,16 +139,16 @@ func (sm *SystemManager) runTask(task SystemTask) {
 func (sm *SystemManager) executeTask(task SystemTask) {
 	taskName := task.GetName()
 	start := time.Now()
-	
+
 	sm.logger.Debug(fmt.Sprintf("Executing system task: %s", taskName))
-	
+
 	// Create a timeout context for the task
 	taskCtx, cancel := context.WithTimeout(sm.ctx, 30*time.Second)
 	defer cancel()
-	
+
 	err := task.Execute(taskCtx)
 	duration := time.Since(start)
-	
+
 	if err != nil {
 		sm.logger.Error(fmt.Sprintf("System task %s failed after %s: %v", taskName, duration, err))
 	} else {
@@ -174,7 +174,7 @@ func NewMessageSummarizerTask(
 	if interval == 0 {
 		interval = 3 * time.Minute // Default to 3 minutes
 	}
-	
+
 	return &MessageSummarizerTask{
 		summarizer:     summarizer,
 		userRepository: userRepo,
@@ -188,19 +188,19 @@ func (mst *MessageSummarizerTask) Execute(ctx context.Context) error {
 	// TODO: We need a way to get active users from the system
 	// For now, this is a placeholder that would need to be connected
 	// to user management or active session tracking
-	
+
 	activeUsers, err := mst.getActiveUsers(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get active users: %w", err)
 	}
-	
+
 	if len(activeUsers) == 0 {
 		mst.logger.Debug("No active users found for message summarization")
 		return nil
 	}
-	
+
 	mst.logger.Debug(fmt.Sprintf("Processing message summarization for %d active users", len(activeUsers)))
-	
+
 	// Process each user's messages
 	for _, userID := range activeUsers {
 		err := mst.summarizer.ProcessAndStoreMemory(ctx, userID)
@@ -209,7 +209,7 @@ func (mst *MessageSummarizerTask) Execute(ctx context.Context) error {
 			// Continue with other users even if one fails
 		}
 	}
-	
+
 	return nil
 }
 
