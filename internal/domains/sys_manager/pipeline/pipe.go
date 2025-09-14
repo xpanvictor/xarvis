@@ -118,6 +118,7 @@ func (p *Pipeline) Broadcast(
 	//   just chunk read into 8–32 KB.
 	var wg sync.WaitGroup
 	var audioCompleteSent uint32 = 0
+	var textCompleteSent uint32 = 0
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -194,6 +195,7 @@ func (p *Pipeline) Broadcast(
 
 	// Pump LLM deltas -> batch per tick, publish once, forward once to TTS.
 	// Close wordCh when upstream closes so streamer can finish.
+	var textSent bool // Track if any text was actually sent
 pumpLoop:
 	for {
 		select {
@@ -217,6 +219,7 @@ pumpLoop:
 				}
 			}
 			if batch != "" {
+				textSent = true // Mark that we've sent some text
 				// publish combined text once with sequence for ordering on client
 				_ = p.pub.SendTextDelta(ctx, userID, sessionID, int(maxIdx), batch)
 				// forward combined text once to TTS
@@ -231,6 +234,16 @@ pumpLoop:
 
 	// 5) Signal no more text -> let streamer flush & close.
 	close(wordCh)
+
+	// Always send text_complete when brain processing finishes
+	// This signals UI to stop streaming and complete the message
+	if atomic.CompareAndSwapUint32(&textCompleteSent, 0, 1) {
+		fmt.Printf("[PIPELINE] Emitting text_complete for session %s (user %s) - brain processing finished\n", sessionID, userID)
+		_ = p.pub.SendEvent(ctx, userID, sessionID, "text_complete", map[string]interface{}{
+			"timestamp": time.Now().Unix(),
+			"textSent":  textSent, // Include whether any text was actually sent
+		})
+	}
 
 	// 6) Wait for audio drain.
 	doneCh := make(chan struct{})

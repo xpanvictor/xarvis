@@ -44,9 +44,10 @@ type NoteEntity struct {
 	ID        uuid.UUID  `gorm:"primaryKey;type:char(36);not null"`
 	UserID    uuid.UUID  `gorm:"column:user_id;type:char(36);not null;index"`
 	ProjectID *uuid.UUID `gorm:"column:project_id;type:char(36);index"` // Optional foreign key to projects
-	Content   string     `gorm:"column:content;type:text;not null"`
-	Tags      TagList    `gorm:"type:json;column:tags"`
-	CreatedAt time.Time  `gorm:"autoCreateTime(3)"`
+	// Markdown
+	Content   string    `gorm:"column:content;type:text;not null"`
+	Tags      TagList   `gorm:"type:json;column:tags"`
+	CreatedAt time.Time `gorm:"autoCreateTime(3)"`
 }
 
 // TableName returns the table name for GORM

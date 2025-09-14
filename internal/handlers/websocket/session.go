@@ -174,20 +174,13 @@ func (s *Session) SendAudioFrame(sessionID uuid.UUID, seq int, frame []byte) err
 
 // SendEvent sends event to the WebSocket client
 func (s *Session) SendEvent(sessionID uuid.UUID, name string, payload any) error {
-    s.mutex.Lock()
-    defer s.mutex.Unlock()
-
-    if !s.IsActive {
-        return fmt.Errorf("session not active")
-    }
-
-    // Send a plain event object to match client expectations: { name, payload }
-    msg := struct {
-        Name    string `json:"name"`
-        Payload any    `json:"payload"`
-    }{Name: name, Payload: payload}
-
-    return s.Conn.WriteJSON(msg)
+	// For completion events, send them as ResponseMessage with the event name as type
+	// This makes them consistent with text_delta messages
+	return s.SendWebSocketMessage(MessageTypeResponse, ResponseMessage{
+		Content:   "",   // Events don't have content
+		Type:      name, // Event name as type (e.g., "text_complete", "audio_complete")
+		Timestamp: time.Now(),
+	})
 }
 
 // Touch updates the last activity timestamp

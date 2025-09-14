@@ -48,6 +48,17 @@ func (s *sessionBuffer) Snapshot() []adapters.ContractMessage {
 
 // Brain Decision System using Messages (BDSM)
 func (b *Brain) Decide(ctx context.Context, msgs []types.Message, outCh *adapters.ContractResponseChannel) (types.Message, error) {
+	var closeOnce sync.Once
+
+	// Ensure the output channel is closed when Decide finishes
+	defer func() {
+		if outCh != nil {
+			closeOnce.Do(func() {
+				close(*outCh)
+			})
+		}
+	}()
+
 	session := &sessionBuffer{allMsgs: make([]adapters.ContractMessage, 0)}
 
 	// seed initial user messages into session
@@ -74,7 +85,6 @@ func (b *Brain) Decide(ctx context.Context, msgs []types.Message, outCh *adapter
 
 	// loop until no more queued inputs
 	for len(cntrctMsgQueue) > 0 {
-
 		// per-round cancelable context
 		roundCtx, cancel := context.WithCancel(ctx)
 
@@ -84,6 +94,8 @@ func (b *Brain) Decide(ctx context.Context, msgs []types.Message, outCh *adapter
 		currCntrIn := cntrctMsgQueue[0]
 		cntrctMsgQueue = cntrctMsgQueue[1:]
 
+		b.logger.Infof("Starting brain round %d with %d queued inputs, toolCallsCount=%d", round, len(cntrctMsgQueue)+1, toolCallsCount)
+
 		// start streaming
 		go b.processMsg(roundCtx, currCntrIn, inputCh)
 
@@ -92,33 +104,60 @@ func (b *Brain) Decide(ctx context.Context, msgs []types.Message, outCh *adapter
 		var lastTimestamp time.Time
 		sawToolCalls := false
 
-		// READ LOOP
-		for elems := range inputCh {
-			for _, elem := range elems {
+		// READ LOOP - properly wait for adapter completion
+		adapterDone := false
+		timeout := time.NewTimer(30 * time.Second) // Timeout to prevent hanging
+		defer timeout.Stop()
 
-				// STRICT TOOL MODE
-				if len(elem.ToolCalls) > 0 {
-					toolCalls = append(toolCalls, elem.ToolCalls...)
-					sawToolCalls = true
-					messageBuffer = "" // wipe assistant buffer
-					cancel()           // stop producer
-					continue           // still drain until channel closes
+		for !adapterDone {
+			select {
+			case elems, ok := <-inputCh:
+				if !ok {
+					// Channel closed without done signal - adapter error
+					b.logger.Warn("Round %d: Channel closed without done signal", round)
+					adapterDone = true
+					break
 				}
 
-				if sawToolCalls {
-					// ignore assistant text after tool call
-					continue
-				}
+				for _, elem := range elems {
+					// Check for adapter completion signal
+					if elem.Done {
+						b.logger.Infof("Round %d: Adapter signaled completion", round)
+						adapterDone = true
+						break
+					}
 
-				if elem.Msg != nil {
-					messageBuffer += elem.Msg.Content
-					lastTimestamp = elem.Msg.CreatedAt
-					if outCh != nil {
-						*outCh <- []adapters.ContractResponseDelta{elem}
+					// STRICT TOOL MODE
+					if len(elem.ToolCalls) > 0 {
+						b.logger.Infof("Round %d: Found %d tool calls", round, len(elem.ToolCalls))
+						toolCalls = append(toolCalls, elem.ToolCalls...)
+						sawToolCalls = true
+						messageBuffer = "" // wipe assistant buffer
+						continue
+					}
+
+					if sawToolCalls {
+						// ignore assistant text after tool call
+						continue
+					}
+
+					if elem.Msg != nil {
+						messageBuffer += elem.Msg.Content
+						lastTimestamp = elem.Msg.CreatedAt
+						if outCh != nil {
+							*outCh <- []adapters.ContractResponseDelta{elem}
+						}
 					}
 				}
+			case <-timeout.C:
+				b.logger.Error("Round %d: Timeout waiting for adapter completion", round)
+				adapterDone = true
+			case <-roundCtx.Done():
+				b.logger.Warn("Round %d: Context cancelled before adapter completion", round)
+				adapterDone = true
 			}
 		}
+		b.logger.Infof("Round %d: Adapter completed, messageBuffer length=%d, sawToolCalls=%v", round, len(messageBuffer), sawToolCalls)
 
 		// ensure we don’t leak round context
 		cancel()
@@ -138,17 +177,21 @@ func (b *Brain) Decide(ctx context.Context, msgs []types.Message, outCh *adapter
 
 		// if tools requested, execute them and enqueue next round
 		if sawToolCalls {
+			b.logger.Infof("Executing %d tool calls in round %d", len(toolCalls), round)
 			toolMsgs, callLength := b.ExecuteToolCallsParallel(ctx, toolCalls)
 			if len(toolMsgs) > 0 {
 				session.Append(toolMsgs...)
+				b.logger.Infof("Added %d tool response messages to session", len(toolMsgs))
 			}
 
 			if toolCallsCount >= b.cfg.MaxToolCallLimit {
+				b.logger.Infof("Reached max tool call limit (%d), stopping", b.cfg.MaxToolCallLimit)
 				break
 			}
 			toolCallsCount += callLength
 
 			if callLength > 0 {
+				b.logger.Infof("Enqueuing next round after tool execution (round %d -> %d)", round, round+1)
 				cntrctMsgQueue = append(cntrctMsgQueue,
 					adapters.ContractInput{
 						Msgs:     session.Snapshot(),
@@ -160,16 +203,20 @@ func (b *Brain) Decide(ctx context.Context, msgs []types.Message, outCh *adapter
 						},
 					},
 				)
+			} else {
+				b.logger.Infof("No tool calls executed, not enqueuing next round")
 			}
 		}
 
 		round++
+		b.logger.Infof("Completed round %d, remaining queue length: %d", round-1, len(cntrctMsgQueue))
 	}
 
 	return finalMessage, nil
 }
 
 func (b *Brain) processMsg(ctx context.Context, contractInput adapters.ContractInput, responseChannel adapters.ContractResponseChannel) {
+	// Don't close the channel here - mux.Stream already closes it
 	err := b.mux.Stream(ctx, contractInput, &responseChannel)
 	if err != nil {
 		b.logger.Error(fmt.Sprintf("Mux streaming error: %v", err))
@@ -179,7 +226,7 @@ func (b *Brain) processMsg(ctx context.Context, contractInput adapters.ContractI
 			b.logger.Error("Could not send error through response channel")
 		}
 	}
-	// mux.Stream should close responseChannel or exit when ctx is canceled
+	// mux.Stream is responsible for closing the channel
 }
 
 func (b *Brain) ExecuteToolCallsParallel(
@@ -207,7 +254,7 @@ func (b *Brain) ExecuteToolCallsParallel(
 					Tags:      []string{"error", "tool_call"},
 				}
 			} else {
-				resultStr := "Tool execution for user request completed. Now explain result to user properly."
+				resultStr := "Tool execution for user request completed. Now you can continue processing, call other tools or explain final results to user."
 				if result.Result != nil {
 					if content, ok := result.Result["content"].(string); ok {
 						resultStr = content
@@ -286,4 +333,9 @@ func NewBrain(
 		logger:       logger,
 		defaultModel: defaultModel,
 	}
+}
+
+// SetUserContext sets the user context on the executor for secure tool execution
+func (b *Brain) SetUserContext(userCtx *toolsystem.UserContext) {
+	b.executor.SetUserContext(userCtx)
 }

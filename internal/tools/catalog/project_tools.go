@@ -14,13 +14,13 @@ type ProjectListToolBuilder struct{}
 
 func (p *ProjectListToolBuilder) Build(deps *tools.ToolDependencies) (toolsystem.Tool, error) {
 	return toolsystem.NewToolBuilder("fetch_projects", "1.0.0", "Fetch all projects for the current user").
-		AddStringParameter("user_id", "The user ID to fetch projects for", true).
 		AddNumberParameter("limit", "Maximum number of projects to return", false).
 		AddNumberParameter("offset", "Number of projects to skip for pagination", false).
 		SetHandler(func(ctx context.Context, args map[string]any) (map[string]any, error) {
-			userID, ok := args["user_id"].(string)
+			// Extract user ID from injected context
+			userID, ok := args["__user_id"].(string)
 			if !ok {
-				return nil, fmt.Errorf("user_id parameter is required and must be a string")
+				return nil, fmt.Errorf("user context not available")
 			}
 
 			// Set defaults
@@ -67,13 +67,13 @@ type ProjectInfoToolBuilder struct{}
 
 func (p *ProjectInfoToolBuilder) Build(deps *tools.ToolDependencies) (toolsystem.Tool, error) {
 	return toolsystem.NewToolBuilder("fetch_project_info", "1.0.0", "Get detailed information about a specific project including its notes").
-		AddStringParameter("user_id", "The user ID who owns the project", true).
 		AddStringParameter("project_id", "The project ID to fetch information for", true).
 		AddBooleanParameter("include_notes", "Whether to include project notes", false).
 		SetHandler(func(ctx context.Context, args map[string]any) (map[string]any, error) {
-			userID, ok := args["user_id"].(string)
+			// Extract user ID from injected context
+			userID, ok := args["__user_id"].(string)
 			if !ok {
-				return nil, fmt.Errorf("user_id parameter is required and must be a string")
+				return nil, fmt.Errorf("user context not available")
 			}
 
 			projectID, ok := args["project_id"].(string)
@@ -121,14 +121,14 @@ type ProjectCreateToolBuilder struct{}
 
 func (p *ProjectCreateToolBuilder) Build(deps *tools.ToolDependencies) (toolsystem.Tool, error) {
 	return toolsystem.NewToolBuilder("create_project", "1.0.0", "Create a new project for the user").
-		AddStringParameter("user_id", "The user ID who will own the project", true).
 		AddStringParameter("title", "The project title", true).
 		AddStringParameter("description", "The project description", false).
 		AddArrayParameter("tags", "Project tags for organization", false).
 		SetHandler(func(ctx context.Context, args map[string]any) (map[string]any, error) {
-			userID, ok := args["user_id"].(string)
+			// Extract user ID from injected context
+			userID, ok := args["__user_id"].(string)
 			if !ok {
-				return nil, fmt.Errorf("user_id parameter is required and must be a string")
+				return nil, fmt.Errorf("user context not available")
 			}
 
 			title, ok := args["title"].(string)
@@ -181,16 +181,16 @@ type ProjectUpdateToolBuilder struct{}
 
 func (p *ProjectUpdateToolBuilder) Build(deps *tools.ToolDependencies) (toolsystem.Tool, error) {
 	return toolsystem.NewToolBuilder("update_project", "1.0.0", "Update an existing project's information").
-		AddStringParameter("user_id", "The user ID who owns the project", true).
 		AddStringParameter("project_id", "The project ID to update", true).
 		AddStringParameter("title", "New project title", false).
 		AddStringParameter("description", "New project description", false).
 		AddArrayParameter("tags", "New project tags", false).
 		AddStringParameter("status", "New project status", false).
 		SetHandler(func(ctx context.Context, args map[string]any) (map[string]any, error) {
-			userID, ok := args["user_id"].(string)
+			// Extract user ID from injected context
+			userID, ok := args["__user_id"].(string)
 			if !ok {
-				return nil, fmt.Errorf("user_id parameter is required and must be a string")
+				return nil, fmt.Errorf("user context not available")
 			}
 
 			projectID, ok := args["project_id"].(string)

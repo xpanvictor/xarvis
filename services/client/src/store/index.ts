@@ -39,6 +39,7 @@ interface ConversationState {
     isConnected: boolean;
     isMuted: boolean;
     audioLevel: number;
+    isSessionProcessing: boolean; // Prevent new responses until session completes
 
     // Streaming state
     streamingMessage: {
@@ -61,6 +62,7 @@ interface ConversationState {
     setListeningState: (state: ListeningState) => void;
     setMuted: (muted: boolean) => void;
     setAudioLevel: (level: number) => void;
+    setSessionProcessing: (processing: boolean) => void;
 
     // Streaming actions
     startStreamingMessage: () => void;
@@ -88,6 +90,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     isConnected: false,
     isMuted: false,
     audioLevel: 0,
+    isSessionProcessing: false,
 
     // Streaming state
     streamingMessage: null,
@@ -147,6 +150,8 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
 
     setAudioLevel: (audioLevel) => set({ audioLevel }),
 
+    setSessionProcessing: (isSessionProcessing) => set({ isSessionProcessing }),
+
     // Streaming actions
     startStreamingMessage: () => set({
         streamingMessage: {
@@ -189,7 +194,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
                 text: state.streamingMessage.content,
                 msg_role: 'assistant',
                 timestamp: new Date().toISOString(),
-                tags: ['streaming', 'completed']
+                tags: ['completed'] // Remove 'streaming' tag so cursor doesn't show
             };
 
             // Add to recent messages
@@ -198,10 +203,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
 
             return {
                 recentMessages: updatedMessages.slice(-20),
-                streamingMessage: {
-                    ...state.streamingMessage,
-                    isStreaming: false
-                }
+                streamingMessage: null // Clear the streaming message completely
             };
         }
         return state;

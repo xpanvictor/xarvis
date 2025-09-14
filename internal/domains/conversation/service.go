@@ -79,7 +79,7 @@ func (c *conversationService) ProcessMsgAsStream(ctx context.Context, userID uui
 	msgs := make([]types.Message, 0)
 	msgs = append(msgs, sysMsgs...)
 	msgs = append(msgs, *nmsg)
-	//todo: handle sessions
+	// Generate a session ID for this processing request
 	sessionID := uuid.New()
 	err = brainSystem.ProcessMessageWithStreaming(ctx, userID, sessionID, msgs, false)
 	return err
@@ -201,4 +201,9 @@ func New(cfg config.Settings, gm *router.Mux,
 		repository:         repo,
 		logger:             logger,
 	}
+}
+
+// SetBrainSystemFactory sets the brain system factory after creation
+func (c *conversationService) SetBrainSystemFactory(factory *brain.BrainSystemFactory) {
+	c.brainSystemFactory = factory
 }

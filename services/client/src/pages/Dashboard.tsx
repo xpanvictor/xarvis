@@ -20,7 +20,9 @@ export const Dashboard: React.FC = () => {
         connectionState,
         listeningState,
         isMuted,
+        isSessionProcessing,
         setConnectionState,
+        setSessionProcessing,
         streamingMessage,
         startStreamingMessage,
         updateStreamingContent,
@@ -88,11 +90,23 @@ export const Dashboard: React.FC = () => {
 
         // Handle streaming text (existing)
         const handleStreamingText = (content: string, isComplete: boolean) => {
-            console.log(`📝 handleStreamingText: content="${content}", isComplete=${isComplete}, hasExistingMessage=${!!streamingMessage}`);
+            console.log(`📝 handleStreamingText: content="${content}", isComplete=${isComplete}, hasExistingMessage=${!!streamingMessage}, sessionProcessing=${isSessionProcessing}`);
+
+            // Don't start new messages if session is still processing
+            if (isSessionProcessing && !streamingMessage && content && content.trim()) {
+                console.log('⚠️ Blocking new message start - session still processing');
+                return;
+            }
 
             // Only start streaming if we have actual content
             if (!streamingMessage && content && content.trim()) {
                 console.log('🚀 Starting new streaming message');
+                setSessionProcessing(true); // Mark session as processing
+
+                // Clear any previous audio collection when starting new session
+                console.log('🎵 Clearing previous audio collection for new session');
+                pcmAudioPlayer.startNewStream(false); // Clear but don't stop current playback
+
                 startStreamingMessage();
             }
 
@@ -102,6 +116,7 @@ export const Dashboard: React.FC = () => {
 
             if (isComplete) {
                 completeStreamingMessage();
+                // NOTE: Don't end session processing here - wait for message_complete
             }
         };
 
@@ -136,9 +151,14 @@ export const Dashboard: React.FC = () => {
         const handleEvent = (eventName: string, payload: any) => {
             console.log(`Event: ${eventName}`, payload);
 
-            if (eventName === 'message_complete') {
-                // Mark streaming as complete
+            if (eventName === 'text_complete') {
+                // ONLY text_complete should stop UI and push to queue
+                console.log('📝 TEXT_COMPLETE event - completing streaming message');
                 completeStreamingMessage();
+            } else if (eventName === 'message_complete') {
+                // Session is now complete - allow new messages
+                console.log('📝 MESSAGE_COMPLETE event - session finished, allowing new messages');
+                setSessionProcessing(false); // Allow new messages to start
                 // Fallback: if audio_complete did not arrive (or got lost),
                 // and we have collected PCM, trigger playback once.
                 if (!audioPlayTriggeredRef.current) {
@@ -152,20 +172,25 @@ export const Dashboard: React.FC = () => {
                 }
             } else if (eventName === 'audio_format') {
                 // Store audio format info for PCM conversion
-                console.log('Audio format received:', payload);
-                // Reset collection for a fresh, single concatenation per message.
-                // Avoid cutting current playback mid-clip; let it finish naturally.
-                pcmAudioPlayer.startNewStream(false);
+                console.log('🎵 Audio format received:', payload);
+                // Don't clear PCM data on format change - only set format
+                // Clear happens automatically when startNewStream is called with stop=true
                 pcmAudioPlayer.setAudioFormat(payload);
                 // New stream beginning; allow a new play trigger for this message
                 audioPlayTriggeredRef.current = false;
             } else if (eventName === 'audio_complete') {
+                // ONLY for audio playback - no text completion
+                console.log('🎵 AUDIO_COMPLETE event - starting audio playback');
+                const qlen = pcmAudioPlayer.getQueueLength();
+                console.log(`🎵 Current PCM queue length: ${qlen} chunks`);
+
                 // Only trigger once per response
                 if (!audioPlayTriggeredRef.current) {
                     console.log('🎵 Audio streaming complete - playing collected audio');
                     audioPlayTriggeredRef.current = true;
                     // Respect mute state for autoplay
                     const muted = useConversationStore.getState().isMuted;
+                    console.log(`🎵 Muted state: ${muted}`);
                     if (!muted) {
                         // If the queue looks empty (rare out-of-order arrival), wait briefly then play
                         const qlen = pcmAudioPlayer.getQueueLength();
@@ -193,9 +218,11 @@ export const Dashboard: React.FC = () => {
 
         // Handle PCM audio data - collect for later playback
         const handlePCMAudio = (pcmData: ArrayBuffer) => {
-            console.log('Received PCM audio data:', pcmData.byteLength, 'bytes');
-            // Just collect the data, don't play yet
+            console.log(`🎵 PCM audio received: ${pcmData.byteLength} bytes, session processing: ${isSessionProcessing}`);
+            // Always collect PCM data regardless of session state
             pcmAudioPlayer.addPCMChunk(pcmData);
+            const qlen = pcmAudioPlayer.getQueueLength();
+            console.log(`🎵 Total PCM chunks collected: ${qlen}`);
         };
 
         // Handle response messages (from websocket response case)
@@ -442,7 +469,7 @@ export const Dashboard: React.FC = () => {
                         onClick={() => {
                             const curr = useConversationStore.getState().isMuted;
                             useConversationStore.getState().setMuted(!curr);
-                            try { audioService.setMuted(!curr); } catch {}
+                            try { audioService.setMuted(!curr); } catch { }
                         }}
                         className={`mute-toggle ${isMuted ? 'muted' : ''}`}
                         title={isMuted ? 'Unmute' : 'Mute'}

@@ -117,6 +117,7 @@ func InitializeRoutes(cfg *config.Settings, r *gin.Engine, dep Dependencies) {
 		dep.ConversationService,
 		dep.DeviceRegistry,
 		cfg,
+		dep.UserService,
 	)
 	wsHandler.RegisterRoutes(r)
 

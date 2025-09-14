@@ -33,7 +33,9 @@ func NewBrainSystemFactory(
 	logger *Logger.Logger,
 	toolRegistry toolsystem.Registry, // Pre-configured with all tools
 ) *BrainSystemFactory {
-	return &BrainSystemFactory{
+	logger.Info("NewBrainSystemFactory called with toolRegistry containing %d tools", len(toolRegistry.List()))
+
+	factory := &BrainSystemFactory{
 		cfg:          cfg,
 		globalMux:    globalMux,
 		deviceReg:    deviceReg,
@@ -41,17 +43,32 @@ func NewBrainSystemFactory(
 		logger:       logger,
 		toolRegistry: toolRegistry,
 	}
+
+	logger.Info("BrainSystemFactory created successfully with toolRegistry set")
+	return factory
 }
 
 // CreateBrainSystem creates a new brain system instance with its own tool registry
 // This ensures each brain system has its own tool instances for user isolation
 func (factory *BrainSystemFactory) CreateBrainSystem() *BrainSystem {
+	// Add debug logging to identify the issue
+	factory.logger.Debug("CreateBrainSystem called")
+
+	if factory.toolRegistry == nil {
+		factory.logger.Error("toolRegistry is nil in CreateBrainSystem")
+		panic("toolRegistry is nil")
+	}
+
+	factory.logger.Debug("toolRegistry is not nil, calling GetContractTools")
+
 	// Create a new tool registry for this brain system instance
 	instanceToolRegistry := toolsystem.NewMemoryRegistry()
 
 	// Copy all tools from the factory's registry to the instance registry
 	// This gives each brain system its own tool instances
 	factoryTools := factory.toolRegistry.GetContractTools()
+	factory.logger.Debug("Successfully got %d contract tools from registry", len(factoryTools))
+
 	for _, contractTool := range factoryTools {
 		// We need to reconstruct the tool from contract tool
 		// For now, we'll create a clone by re-registering

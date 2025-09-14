@@ -49,5 +49,39 @@ func RegisterToolBuilders(factory *tools.ToolFactory) error {
 		return fmt.Errorf("failed to register web search tool: %w", err)
 	}
 
+	// Memory management tools
+	if err := factory.RegisterBuilder("search_memories", &catalog.MemorySearchToolBuilder{}); err != nil {
+		return fmt.Errorf("failed to register memory search tool: %w", err)
+	}
+
+	if err := factory.RegisterBuilder("create_memory", &catalog.MemoryCreateToolBuilder{}); err != nil {
+		return fmt.Errorf("failed to register memory create tool: %w", err)
+	}
+
+	if err := factory.RegisterBuilder("list_memories", &catalog.MemoryListToolBuilder{}); err != nil {
+		return fmt.Errorf("failed to register memory list tool: %w", err)
+	}
+
+	// Task management tools
+	if err := factory.RegisterBuilder("create_task", &catalog.TaskCreateToolBuilder{}); err != nil {
+		return fmt.Errorf("failed to register task create tool: %w", err)
+	}
+
+	if err := factory.RegisterBuilder("fetch_tasks", &catalog.TaskListToolBuilder{}); err != nil {
+		return fmt.Errorf("failed to register task fetch tool: %w", err)
+	}
+
+	if err := factory.RegisterBuilder("update_task", &catalog.TaskUpdateToolBuilder{}); err != nil {
+		return fmt.Errorf("failed to register task update tool: %w", err)
+	}
+
+	if err := factory.RegisterBuilder("complete_task", &catalog.TaskCompleteToolBuilder{}); err != nil {
+		return fmt.Errorf("failed to register task complete tool: %w", err)
+	}
+
+	if err := factory.RegisterBuilder("get_upcoming_tasks", &catalog.TaskUpcomingToolBuilder{}); err != nil {
+		return fmt.Errorf("failed to register task upcoming tool: %w", err)
+	}
+
 	return nil
 }

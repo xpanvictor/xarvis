@@ -46,7 +46,7 @@ export interface ErrorMessage {
 
 export interface ResponseMessage {
     content: string;
-    type: 'text' | 'audio';
+    type: 'text' | 'audio' | 'text_complete' | 'audio_complete' | 'message_complete' | 'audio_format' | 'text_delta';
     timestamp: string;
 }
 
@@ -89,7 +89,15 @@ class WebSocketService {
     private eventHandlers: Partial<WebSocketServiceEvents> = {};
 
     constructor() {
-        this.userId = localStorage.getItem('userId') || null;
+        const storedUserId = localStorage.getItem('userId');
+        // Validate stored userId - clear if it looks like a URL
+        if (storedUserId && (storedUserId.startsWith('ws://') || storedUserId.startsWith('wss://'))) {
+            console.warn('Clearing invalid userId from localStorage:', storedUserId);
+            localStorage.removeItem('userId');
+            this.userId = null;
+        } else {
+            this.userId = storedUserId;
+        }
     }
 
     // Event handler registration
@@ -111,10 +119,22 @@ class WebSocketService {
 
     // Connection management
     connect(userId?: string): Promise<void> {
-        return new Promise((resolve, reject) => {
+        return new Promise(async (resolve, reject) => {
             if (this.ws && this.ws.readyState === WebSocket.OPEN) {
                 resolve();
                 return;
+            }
+
+            try {
+                // Get the real user ID from the authenticated user profile
+                if (!userId) {
+                    const { userAPI } = await import('./api');
+                    const userProfile = await userAPI.getProfile();
+                    userId = userProfile.id;
+                    console.log('Using authenticated user ID:', userId);
+                }
+            } catch (error) {
+                console.warn('Failed to get authenticated user profile, falling back to generated ID:', error);
             }
 
             this.userId = userId || this.userId || this.generateUserId();
@@ -167,11 +187,20 @@ class WebSocketService {
     private getWebSocketUrl(): string {
         const baseUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8088';
         const userId = this.userId;
-        return `${baseUrl}/ws/?userId=${userId}`;
+        const token = localStorage.getItem('accessToken');
+
+        let url = `${baseUrl}/ws/?userId=${userId}`;
+        if (token) {
+            url += `&token=${encodeURIComponent(token)}`;
+        }
+
+        return url;
     }
 
     private generateUserId(): string {
-        return 'user_' + Math.random().toString(36).substr(2, 9);
+        const userId = 'user_' + Math.random().toString(36).substr(2, 9);
+        console.log('Generated new userId:', userId);
+        return userId;
     }
 
     private sendInitMessage() {
@@ -259,13 +288,6 @@ class WebSocketService {
                     }
                     break;
 
-                case 'text_delta':
-                    // Handle streaming text chunks from backend
-                    const textDelta = wsMessage.data as { seq: number; text: string };
-                    console.log('Received text delta seq:', textDelta.seq, 'text:', textDelta.text);
-                    this.emit('onStreamingText', textDelta.text, false);
-                    break;
-
                 case 'audio_format':
                     // Handle audio format information and broadcast as event
                     console.log('Audio format:', wsMessage.data);
@@ -279,28 +301,60 @@ class WebSocketService {
                     break;
 
                 case 'message_complete':
-                    // Handle message completion - text streaming is done
-                    console.log('Message complete');
-                    this.emit('onStreamingText', '', true); // Signal completion
+                    // Handle message completion - just a session indicator
+                    console.log('📝 MESSAGE_COMPLETE (direct): Session complete - just an indicator');
                     this.emit('onEvent', 'message_complete', {});
+                    // NO text completion here - just session indicator
                     break;
 
                 case 'response':
                     console.log('📝 Response message received with data:', wsMessage.data);
                     const responseData = wsMessage.data as ResponseMessage;
                     console.log('📝 Response data parsed - type:', responseData.type, 'content:', responseData.content);
+
+                    // Handle text deltas (streaming content)
+                    if (responseData.type === 'text_delta') {
+                        console.log('📝 TEXT_DELTA: Emitting text delta:', responseData.content);
+                        this.emit('onStreamingText', responseData.content, false); // Not complete yet
+                        this.emit('onTextDelta', 0, responseData.content); // Also emit text delta event
+                        break;
+                    }
+
+                    // Handle completion events that come as response messages
+                    if (responseData.type === 'text_complete') {
+                        console.log('📝 TEXT_COMPLETE: Text streaming complete - ONLY event that stops UI and pushes to queue');
+                        this.emit('onStreamingText', '', true); // Signal completion - ONLY here!
+                        this.emit('onEvent', 'text_complete', {});
+                        break;
+                    }
+
+                    if (responseData.type === 'audio_complete') {
+                        console.log('📝 AUDIO_COMPLETE: Audio ready for playback - should start playing');
+                        this.emit('onEvent', 'audio_complete', {});
+                        // NO text completion here - only audio playback
+                        break;
+                    }
+
+                    if (responseData.type === 'message_complete') {
+                        console.log('📝 MESSAGE_COMPLETE: Session complete - just an indicator');
+                        this.emit('onEvent', 'message_complete', {});
+                        // NO text completion here - just session indicator
+                        break;
+                    }
+
                     if (responseData.type === 'text') {
-                        // Handle streaming text
-                        console.log('📝 Emitting streaming text:', responseData.content);
+                        // Handle final complete text (not streaming)
+                        console.log('📝 TEXT: Emitting complete text:', responseData.content);
                         this.emit('onStreamingText', responseData.content, true);
                     }
+
                     this.emit('onMessage', responseData);
                     break;
 
                 case 'text':
-                    // Handle streaming text chunks
+                    // Handle complete text messages (not streaming chunks)
                     const textData = wsMessage.data as { content: string; isComplete?: boolean };
-                    this.emit('onStreamingText', textData.content, textData.isComplete || false);
+                    this.emit('onStreamingText', textData.content, textData.isComplete !== false); // Default to complete
                     break;
 
                 case 'audio':

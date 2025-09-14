@@ -5,8 +5,17 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/xpanvictor/xarvis/pkg/assistant/adapters"
 )
+
+// UserContext contains user metadata for tool execution
+type UserContext struct {
+	UserID          uuid.UUID `json:"user_id"`
+	Username        string    `json:"username"`
+	UserEmail       string    `json:"user_email"`
+	CurrentDateTime time.Time `json:"current_date_time"`
+}
 
 type ToolExecutionResult struct {
 	ToolCall *adapters.ContractToolCall
@@ -17,9 +26,17 @@ type ToolExecutionResult struct {
 
 type Executor interface {
 	Execute(ctx context.Context, reg Registry, call adapters.ContractToolCall) (*ToolExecutionResult, error)
+	SetUserContext(userCtx *UserContext) // Set user context for this execution session
 }
 
-type executor struct{}
+type executor struct {
+	userContext *UserContext
+}
+
+// SetUserContext implements Executor.
+func (e *executor) SetUserContext(userCtx *UserContext) {
+	e.userContext = userCtx
+}
 
 // Execute implements Executor.
 func (e *executor) Execute(ctx context.Context, reg Registry, call adapters.ContractToolCall) (*ToolExecutionResult, error) {
@@ -44,11 +61,27 @@ func (e *executor) Execute(ctx context.Context, reg Registry, call adapters.Cont
 		}, fmt.Errorf("tool not found: %s", call.ToolName)
 	}
 
+	// Inject user context into the arguments if executor has user context set
+	args := call.Arguments
+	if e.userContext != nil {
+		// Clone the arguments map to avoid modifying the original
+		args = make(map[string]any)
+		for k, v := range call.Arguments {
+			args[k] = v
+		}
+
+		// Inject meta context (these override any existing values for security)
+		args["__user_id"] = e.userContext.UserID.String()
+		args["__username"] = e.userContext.Username
+		args["__user_email"] = e.userContext.UserEmail
+		args["__current_date_time"] = e.userContext.CurrentDateTime.Format(time.RFC3339)
+	}
+
 	// Metric tracking
 	startTime := time.Now()
 
-	// Execute the tool handler
-	result, toolErr := selectedTool.Handler(ctx, call.Arguments)
+	// Execute the tool handler with injected context
+	result, toolErr := selectedTool.Handler(ctx, args)
 	runningDuration := time.Since(startTime)
 
 	// Create the execution result
@@ -65,5 +98,7 @@ func (e *executor) Execute(ctx context.Context, reg Registry, call adapters.Cont
 func (e *executor) AsyncExecute() {}
 
 func NewExecutor() Executor {
-	return &executor{}
+	return &executor{
+		userContext: nil, // Will be set via SetUserContext before execution
+	}
 }

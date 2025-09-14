@@ -130,6 +130,16 @@ func (a *App) setupDependencies() error {
 	deps.NoteService = note.NewNoteService(a.NoteRepo, a.Logger)
 	deps.TaskService = task.NewTaskService(a.TaskRepo, a.Logger)
 
+	// Create conversation service early so tools can access it
+	deps.ConversationService = conversation.New(
+		*deps.Configs,
+		deps.Mux,
+		deps.DeviceRegistry,
+		deps.Logger,
+		a.ConversationRepo,
+		nil, // BrainSystemFactory will be set later
+	)
+
 	// Store deps for tools setup
 	a.ServerDeps = deps
 
@@ -173,14 +183,12 @@ func (a *App) setupDependencies() error {
 		taskServiceImpl.SetScheduler(schedulerAdapter)
 	}
 
-	deps.ConversationService = conversation.New(
-		*deps.Configs,
-		deps.Mux,
-		deps.DeviceRegistry,
-		deps.Logger,
-		a.ConversationRepo,
-		a.BrainSystemFactory,
-	) // Create conversation service
+	// Update conversation service with the brain system factory
+	if convService, ok := deps.ConversationService.(interface {
+		SetBrainSystemFactory(*brain.BrainSystemFactory)
+	}); ok {
+		convService.SetBrainSystemFactory(a.BrainSystemFactory)
+	}
 
 	// Start the scheduler
 	go func() {
@@ -204,7 +212,7 @@ func (a *App) setupEmbedder() error {
 	// Check if Gemini API key is configured
 	geminiAPIKey := a.Config.AssistantKeys.Gemini.APIKey
 	if geminiAPIKey == "" {
-		return fmt.Errorf("Gemini API key not configured in assistantKeys.gemini.gemini_api_key")
+		return fmt.Errorf("gemini API key not configured in assistantKeys.gemini.gemini_api_key")
 	}
 
 	// Create Gemini embedder
@@ -323,13 +331,14 @@ func (a *App) setupTools() error {
 
 	// Create tool dependencies
 	toolDeps := &tools.ToolDependencies{
-		UserService:      a.ServerDeps.UserService,
-		ProjectService:   a.ServerDeps.ProjectService,
-		NoteService:      a.ServerDeps.NoteService,
-		TaskService:      a.ServerDeps.TaskService,
-		ConversationRepo: a.ConversationRepo,
-		Logger:           a.Logger,
-		TavilyAPIKey:     a.Config.ExternalAPIs.TavilyAPIKey,
+		UserService:         a.ServerDeps.UserService,
+		ProjectService:      a.ServerDeps.ProjectService,
+		NoteService:         a.ServerDeps.NoteService,
+		TaskService:         a.ServerDeps.TaskService,
+		ConversationService: a.ServerDeps.ConversationService,
+		ConversationRepo:    a.ConversationRepo,
+		Logger:              a.Logger,
+		TavilyAPIKey:        a.Config.ExternalAPIs.TavilyAPIKey,
 	}
 
 	// Create tool factory
@@ -369,6 +378,9 @@ func (a *App) setupTools() error {
 	}
 
 	// Create brain system factory with pre-configured tools
+	a.Logger.Info("Creating brain system factory with %d registered tools", len(registeredTools))
+	a.Logger.Info("masterToolRegistry has %d tools", len(masterToolRegistry.List()))
+
 	a.BrainSystemFactory = brain.NewBrainSystemFactory(
 		a.Config.BrainConfig,
 		a.LLMRouter,

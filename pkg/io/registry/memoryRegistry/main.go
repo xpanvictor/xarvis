@@ -79,7 +79,40 @@ func (m *mmrRegistry) ListUserEndpoints(userID uuid.UUID) []device.Endpoint {
 
 // RemoveDevice implements registry.Registry.
 func (m *mmrRegistry) RemoveDevice(userID uuid.UUID, deviceID uuid.UUID) error {
-	panic("unimplemented")
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Check if user exists
+	userMap, exists := m.dvMap[userID]
+	if !exists {
+		return fmt.Errorf("user %s not found", userID)
+	}
+
+	// Check if device exists
+	device, exists := userMap[deviceID]
+	if !exists {
+		return fmt.Errorf("device %s not found for user %s", deviceID, userID)
+	}
+
+	// Close all endpoints for this device
+	for _, endpoint := range device.Endpoints {
+		if closer, ok := endpoint.(interface{ Close() error }); ok {
+			if err := closer.Close(); err != nil {
+				// Log error but continue cleanup
+				fmt.Printf("Error closing endpoint: %v\n", err)
+			}
+		}
+	}
+
+	// Remove device from user's device map
+	delete(userMap, deviceID)
+
+	// If user has no more devices, remove user from registry
+	if len(userMap) == 0 {
+		delete(m.dvMap, userID)
+	}
+
+	return nil
 }
 
 func (m *mmrRegistry) TouchDevice(userID uuid.UUID, deviceID uuid.UUID) error {

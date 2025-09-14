@@ -61,13 +61,19 @@ func (g *geminiAdapter) Process(ctx context.Context, input adapters.ContractInpu
 	model := g.gp.GetModel("gemini-2.5-flash-lite")
 	model.Tools = g.ConvertTools(input.ToolList)
 
+	log.Printf("Gemini: Model configured with %d tools", len(model.Tools))
+
 	cs := model.StartChat()
-	iter := cs.SendMessageStream(ctx, g.ConvertMsgs(input.Msgs)...)
+	convertedMsgs := g.ConvertMsgs(input.Msgs)
+	log.Printf("Gemini: Converted %d input messages to %d parts", len(input.Msgs), len(convertedMsgs))
+
+	iter := cs.SendMessageStream(ctx, convertedMsgs...)
 
 	requestMsgBuffer := make([]adapters.ContractResponseDelta, 0, int(g.cfg.DeltaBufferLimit))
 	var seq uint
 
 	ctx2, cancel := context.WithCancel(ctx)
+	log.Printf("Gemini: Created context for processing")
 	ticker := time.NewTicker(g.cfg.DeltaTimeDuration)
 	flusherDone := make(chan struct{})
 
@@ -106,8 +112,11 @@ func (g *geminiAdapter) Process(ctx context.Context, input adapters.ContractInpu
 	}()
 
 	// Collect deltas from Gemini into our local buffer
+	log.Printf("Gemini: Starting Chat call with %d messages", len(input.Msgs))
 	err = g.gp.Chat(ctx2, "", iter, func(resp *genai.GenerateContentResponse) error {
+		log.Printf("Gemini: Received response with %d candidates", len(resp.Candidates))
 		deltas := g.ConvertMsgBackward(resp)
+		log.Printf("Gemini: Converted to %d deltas", len(deltas))
 		for _, msg := range deltas {
 			seq++
 			msg.Index = seq
@@ -116,20 +125,32 @@ func (g *geminiAdapter) Process(ctx context.Context, input adapters.ContractInpu
 		return nil
 	})
 
+	if err != nil {
+		log.Printf("Gemini: Chat error: %v", err)
+	} else {
+		log.Printf("Gemini: Chat completed successfully, total buffer size: %d", len(requestMsgBuffer))
+	}
+
 	// Begin shutdown sequence in strict order:
-	// 1) Stop new flush ticks, 2) cancel ctx2, 3) wait flusher exit, 4) final drain, 5) send Done, 6) close channel.
+	// 1) Stop new flush ticks, 2) do a final flush, 3) cancel ctx2, 4) wait flusher exit, 5) send Done, 6) close channel.
 	ticker.Stop()
+
+	// Final drain: ensure all buffered deltas are sent before cancelling context
+	log.Printf("Gemini: Final drain - buffer size before: %d", len(requestMsgBuffer))
+	flushed := drainRequestBuffer(*handlerChannel)
+	log.Printf("Gemini: Final drain completed, flushed: %v", flushed)
+
+	// Now cancel context and wait for flusher to exit
 	cancel()
 	<-flusherDone
-
-	// Final drain: do a last best-effort flush of any remaining buffered deltas
-	_ = drainRequestBuffer(*handlerChannel)
 
 	// Send final Done (block a little to guarantee delivery, but avoid permanent deadlock)
 	finalDelta := []adapters.ContractResponseDelta{{
 		Done:      true,
 		CreatedAt: time.Now(),
 	}}
+
+	log.Printf("Gemini: Sending Done signal")
 
 	// Small timeout context only for the final Done send
 	sendCtx, sendCancel := context.WithTimeout(context.Background(), 2*time.Second)

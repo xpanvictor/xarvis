@@ -20,15 +20,15 @@ type NoteListToolBuilder struct{}
 
 func (n *NoteListToolBuilder) Build(deps *tools.ToolDependencies) (toolsystem.Tool, error) {
 	return toolsystem.NewToolBuilder("fetch_notes", "1.0.0", "Fetch notes for the current user with optional project filtering").
-		AddStringParameter("user_id", "The user ID to fetch notes for", true).
 		AddStringParameter("project_id", "Optional project ID to filter notes", false).
 		AddNumberParameter("limit", "Maximum number of notes to return", false).
 		AddNumberParameter("offset", "Number of notes to skip for pagination", false).
 		AddStringParameter("search", "Search term to filter notes by content", false).
 		SetHandler(func(ctx context.Context, args map[string]any) (map[string]any, error) {
-			userID, ok := args["user_id"].(string)
+			// Extract user ID from injected context
+			userID, ok := args["__user_id"].(string)
 			if !ok {
-				return nil, fmt.Errorf("user_id parameter is required and must be a string")
+				return nil, fmt.Errorf("user context not available")
 			}
 
 			// Set defaults
@@ -100,15 +100,15 @@ func (n *NoteListToolBuilder) Build(deps *tools.ToolDependencies) (toolsystem.To
 type NoteCreateToolBuilder struct{}
 
 func (n *NoteCreateToolBuilder) Build(deps *tools.ToolDependencies) (toolsystem.Tool, error) {
-	return toolsystem.NewToolBuilder("create_note", "1.0.0", "Create a new note for the user").
-		AddStringParameter("user_id", "The user ID who will own the note", true).
-		AddStringParameter("content", "The note content", true).
+	return toolsystem.NewToolBuilder("create_note", "1.0.0", "Create a new note for the user. Note's content should be well detailed with markdown.").
+		AddStringParameter("content", "The note content in markdown, can be well detailed. Can include links, etc.", true).
 		AddStringParameter("project_id", "Optional project ID to associate with the note", false).
 		AddArrayParameter("tags", "Note tags for organization", false).
 		SetHandler(func(ctx context.Context, args map[string]any) (map[string]any, error) {
-			userID, ok := args["user_id"].(string)
+			// Extract user ID from injected context
+			userID, ok := args["__user_id"].(string)
 			if !ok {
-				return nil, fmt.Errorf("user_id parameter is required and must be a string")
+				return nil, fmt.Errorf("user context not available")
 			}
 
 			content, ok := args["content"].(string)
@@ -160,15 +160,15 @@ type NoteUpdateToolBuilder struct{}
 
 func (n *NoteUpdateToolBuilder) Build(deps *tools.ToolDependencies) (toolsystem.Tool, error) {
 	return toolsystem.NewToolBuilder("update_note", "1.0.0", "Update an existing note's information").
-		AddStringParameter("user_id", "The user ID who owns the note", true).
 		AddStringParameter("note_id", "The note ID to update", true).
 		AddStringParameter("content", "New note content", false).
 		AddArrayParameter("tags", "New note tags", false).
 		AddStringParameter("project_id", "New project ID to associate with note", false).
 		SetHandler(func(ctx context.Context, args map[string]any) (map[string]any, error) {
-			userID, ok := args["user_id"].(string)
+			// Extract user ID from injected context
+			userID, ok := args["__user_id"].(string)
 			if !ok {
-				return nil, fmt.Errorf("user_id parameter is required and must be a string")
+				return nil, fmt.Errorf("user context not available")
 			}
 
 			noteID, ok := args["note_id"].(string)
@@ -223,15 +223,15 @@ type NoteSearchToolBuilder struct{}
 
 func (n *NoteSearchToolBuilder) Build(deps *tools.ToolDependencies) (toolsystem.Tool, error) {
 	return toolsystem.NewToolBuilder("search_notes", "1.0.0", "Search notes by content and title").
-		AddStringParameter("user_id", "The user ID to search notes for", true).
 		AddStringParameter("query", "Search query to match against note content and titles", true).
 		AddStringParameter("project_id", "Optional project ID to limit search scope", false).
 		AddNumberParameter("limit", "Maximum number of notes to return", false).
 		AddNumberParameter("offset", "Number of notes to skip for pagination", false).
 		SetHandler(func(ctx context.Context, args map[string]any) (map[string]any, error) {
-			userID, ok := args["user_id"].(string)
+			// Extract user ID from injected context
+			userID, ok := args["__user_id"].(string)
 			if !ok {
-				return nil, fmt.Errorf("user_id parameter is required and must be a string")
+				return nil, fmt.Errorf("user context not available")
 			}
 
 			query, ok := args["query"].(string)

@@ -13,6 +13,7 @@ import (
 	"github.com/xpanvictor/xarvis/internal/config"
 	"github.com/xpanvictor/xarvis/internal/domains/conversation"
 	vss "github.com/xpanvictor/xarvis/internal/domains/sys_manager/voice_stream_system"
+	"github.com/xpanvictor/xarvis/internal/domains/user"
 	"github.com/xpanvictor/xarvis/pkg/Logger"
 	"github.com/xpanvictor/xarvis/pkg/io/device"
 	"github.com/xpanvictor/xarvis/pkg/io/registry"
@@ -26,6 +27,7 @@ type WebSocketHandler struct {
 	config              *config.Settings
 	connectionManager   *ConnectionManager
 	upgrader            websocket.Upgrader
+	userService         user.UserService // Add user service for token validation
 }
 
 // NewWebSocketHandler creates a new WebSocket handler
@@ -34,6 +36,7 @@ func NewWebSocketHandler(
 	conversationService conversation.ConversationService,
 	deviceRegistry registry.DeviceRegistry,
 	config *config.Settings,
+	userService user.UserService,
 ) *WebSocketHandler {
 	return &WebSocketHandler{
 		logger:              logger,
@@ -41,6 +44,7 @@ func NewWebSocketHandler(
 		deviceRegistry:      deviceRegistry,
 		config:              config,
 		connectionManager:   NewConnectionManager(logger),
+		userService:         userService,
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
 				// TODO: Implement proper origin checking for production
@@ -72,16 +76,47 @@ func (h *WebSocketHandler) HandleMainWebSocket(c *gin.Context) {
 	}
 	defer conn.Close()
 
-	// Extract user ID from query parameters or generate new one
+	// Extract user ID from authenticated token
+	token := c.Query("token")
 	userIDStr := c.Query("userId")
+
+	h.logger.Infof("ws token: %v", token)
+	h.logger.Infof("ws id users id is %v", userIDStr)
+	h.logger.Infof("Full request URL: %v", c.Request.URL.String())
+	h.logger.Infof("Query params: %v", c.Request.URL.Query())
+
 	var userID uuid.UUID
-	if userIDStr != "" {
+
+	// If token is provided, validate it and get the real user ID
+	if token != "" {
+		claims, err := h.userService.ValidateToken(c.Request.Context(), token)
+		if err != nil {
+			h.logger.Errorf("WebSocket token validation failed: %v", err)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+			return
+		}
+
+		// Parse the userID from claims
+		parsedUserID, err := uuid.Parse(claims.UserID)
+		if err != nil {
+			h.logger.Errorf("Invalid userID in token claims: %s", claims.UserID)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user ID in token"})
+			return
+		}
+
+		userID = parsedUserID
+		h.logger.Infof("Authenticated WebSocket user: %s", userID)
+	} else if userIDStr != "" {
+		// Fallback to query parameter (for testing/development)
 		if parsedID, err := uuid.Parse(userIDStr); err == nil {
 			userID = parsedID
+			h.logger.Warnf("Using unauthenticated userId from query parameter: %s", userID)
 		} else {
+			h.logger.Warnf("Invalid userId format received: '%s', generating new UUID", userIDStr)
 			userID = uuid.New()
 		}
 	} else {
+		h.logger.Debugf("No userId provided, generating new UUID")
 		userID = uuid.New()
 	}
 
@@ -146,9 +181,11 @@ func (h *WebSocketHandler) HandleAudioWebSocket(c *gin.Context) {
 		if parsedID, err := uuid.Parse(userIDStr); err == nil {
 			userID = parsedID
 		} else {
+			h.logger.Warnf("Invalid userId format received in HandleAudioWebSocket: '%s', generating new UUID", userIDStr)
 			userID = uuid.New()
 		}
 	} else {
+		h.logger.Debugf("No userId provided in HandleAudioWebSocket, generating new UUID")
 		userID = uuid.New()
 	}
 
@@ -211,9 +248,11 @@ func (h *WebSocketHandler) HandleTextWebSocket(c *gin.Context) {
 		if parsedID, err := uuid.Parse(userIDStr); err == nil {
 			userID = parsedID
 		} else {
+			h.logger.Warnf("Invalid userId format received in HandleTextWebSocket: '%s', generating new UUID", userIDStr)
 			userID = uuid.New()
 		}
 	} else {
+		h.logger.Debugf("No userId provided in HandleTextWebSocket, generating new UUID")
 		userID = uuid.New()
 	}
 

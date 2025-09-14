@@ -193,3 +193,22 @@ func MessagesToContractMessages(messages []Message) []adapters.ContractMessage {
 	}
 	return contractMsgs
 }
+
+// UserContext contains user metadata that is automatically injected into tool calls
+// This prevents tools from requiring user_id parameters and eliminates security risks
+type UserContext struct {
+	UserID          uuid.UUID `json:"user_id"`
+	Username        string    `json:"username"`
+	UserEmail       string    `json:"user_email"`
+	CurrentDateTime time.Time `json:"current_date_time"`
+}
+
+// NewUserContext creates a new UserContext with current timestamp
+func NewUserContext(userID uuid.UUID, username, userEmail string) *UserContext {
+	return &UserContext{
+		UserID:          userID,
+		Username:        username,
+		UserEmail:       userEmail,
+		CurrentDateTime: time.Now(),
+	}
+}

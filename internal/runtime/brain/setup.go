@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/xpanvictor/xarvis/internal/config"
@@ -101,6 +102,14 @@ func (bs *BrainSystem) ProcessMessage(
 	sessionID uuid.UUID,
 	msgs []types.Message,
 ) (*types.Message, error) {
+	// Set user context on the executor before processing
+	userCtx := &toolsystem.UserContext{
+		UserID:          userID,
+		Username:        "user",             // TODO: Get actual username from user service
+		UserEmail:       "user@example.com", // TODO: Get actual email from user service
+		CurrentDateTime: time.Now(),
+	}
+	bs.Brain.SetUserContext(userCtx)
 
 	msg, err := bs.Brain.Decide(ctx, msgs, nil)
 	return &msg, err
@@ -114,6 +123,16 @@ func (bs *BrainSystem) ProcessMessageWithStreaming(
 	msgs []types.Message,
 	disableAudio bool,
 ) error {
+	// Set user context on the executor before processing
+	bs.logger.Infof("This users id is %v", userID)
+	userCtx := &toolsystem.UserContext{
+		UserID:          userID,
+		Username:        "user",             // TODO: Get actual username from user service
+		UserEmail:       "user@example.com", // TODO: Get actual email from user service
+		CurrentDateTime: time.Now(),
+	}
+	bs.Brain.SetUserContext(userCtx)
+
 	// Create response channel for streaming
 	responseChannel := make(adapters.ContractResponseChannel, 10)
 
@@ -125,25 +144,21 @@ func (bs *BrainSystem) ProcessMessageWithStreaming(
 			}
 		}()
 
+		bs.logger.Info("Brain processing starting...")
 		_, err := bs.Brain.Decide(ctx, msgs, &responseChannel)
 		if err != nil {
 			bs.logger.Error("Brain decide error: %v", err)
 		}
+		bs.logger.Info("Brain processing completed")
 	}()
 
-	// Stream through pipeline in a separate goroutine to avoid blocking
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				bs.logger.Error("Recovered from panic in pipeline goroutine: %v", r)
-			}
-		}()
+	// Pipeline reads from channel until it's closed (blocks until brain is done)
+	bs.logger.Info("Pipeline starting...")
+	err := bs.Pipeline.Broadcast(ctx, userID, sessionID, &responseChannel, disableAudio)
+	if err != nil {
+		bs.logger.Error("Pipeline broadcast error: %v", err)
+	}
+	bs.logger.Info("Pipeline completed")
 
-		err := bs.Pipeline.Broadcast(ctx, userID, sessionID, &responseChannel, disableAudio)
-		if err != nil {
-			bs.logger.Error("Pipeline broadcast error: %v", err)
-		}
-	}()
-
-	return nil // Return immediately, streaming happens in background
+	return nil
 }

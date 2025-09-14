@@ -3,6 +3,7 @@ package tools
 import (
 	"fmt"
 
+	"github.com/xpanvictor/xarvis/internal/domains/conversation"
 	"github.com/xpanvictor/xarvis/internal/domains/note"
 	"github.com/xpanvictor/xarvis/internal/domains/project"
 	"github.com/xpanvictor/xarvis/internal/domains/task"
@@ -15,10 +16,11 @@ import (
 // ToolDependencies holds all the services and repositories that tools need access to
 type ToolDependencies struct {
 	// Services
-	UserService    user.UserService
-	ProjectService project.ProjectService
-	NoteService    note.NoteService
-	TaskService    task.TaskService
+	UserService         user.UserService
+	ProjectService      project.ProjectService
+	NoteService         note.NoteService
+	TaskService         task.TaskService
+	ConversationService conversation.ConversationService
 
 	// Repositories
 	ConversationRepo types.ConversationRepository
