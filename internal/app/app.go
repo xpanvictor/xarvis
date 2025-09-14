@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"time"
 
 	"github.com/go-redis/redis"
@@ -8,6 +9,7 @@ import (
 	"github.com/xpanvictor/xarvis/internal/domains/conversation"
 	"github.com/xpanvictor/xarvis/internal/domains/note"
 	"github.com/xpanvictor/xarvis/internal/domains/project"
+	"github.com/xpanvictor/xarvis/internal/domains/scheduler"
 	"github.com/xpanvictor/xarvis/internal/domains/task"
 	"github.com/xpanvictor/xarvis/internal/domains/user"
 	convoRepo "github.com/xpanvictor/xarvis/internal/repository/conversation"
@@ -39,6 +41,8 @@ type App struct {
 	ProjectRepo      project.ProjectRepository
 	NoteRepo         note.NoteRepository
 	TaskRepo         task.TaskRepository
+	// services
+	SchedulerService scheduler.SchedulerService
 	ServerDeps       server.Dependencies
 }
 
@@ -89,6 +93,31 @@ func (a *App) setupDependencies() error {
 	a.NoteRepo = noteRepo.NewGormNoteRepo(a.DB)
 	a.TaskRepo = taskRepo.NewGormTaskRepo(a.DB)
 
+	// Set up scheduler service
+	schedulerConfig := scheduler.AsynqSchedulerConfig{
+		RedisAddr:     "localhost:6379", // Use default Redis address for now
+		RedisPassword: "",               // No password for local Redis
+		RedisDB:       0,                // Default Redis DB
+		Concurrency:   10,
+		Queues: map[string]int{
+			"default": 6,
+			"high":    3,
+			"low":     1,
+		},
+	}
+
+	// Create brain system for scheduler (we'll get it from conversation service later)
+	// For now, initialize scheduler without brain system and set it later
+	a.SchedulerService = scheduler.NewAsynqSchedulerService(
+		schedulerConfig,
+		a.Logger,
+		nil, // TaskService will be set later to avoid circular dependency
+		a.DeviceRegistry,
+		a.LLMRouter,
+		nil, // BrainSystem will be set later
+	)
+	a.TaskRepo = taskRepo.NewGormTaskRepo(a.DB)
+
 	// JWT settings from config
 	jwtSecret := a.Config.Auth.JWTSecret
 	if jwtSecret == "" {
@@ -106,7 +135,17 @@ func (a *App) setupDependencies() error {
 	deps.UserService = user.NewUserService(a.UserRepo, a.Logger, jwtSecret, tokenTTL)
 	deps.ProjectService = project.NewProjectService(a.ProjectRepo, a.Logger)
 	deps.NoteService = note.NewNoteService(a.NoteRepo, a.Logger)
-	deps.TaskService = task.NewTaskService(a.TaskRepo, a.Logger)
+	
+	// Create task service and wire with scheduler
+	taskService := task.NewTaskService(a.TaskRepo, a.Logger)
+	deps.TaskService = taskService
+	
+	// Set up circular dependency between task service and scheduler
+	schedulerAdapter := scheduler.NewTaskSchedulerAdapter(a.SchedulerService)
+	if taskServiceImpl, ok := taskService.(interface{ SetScheduler(task.TaskScheduler) }); ok {
+		taskServiceImpl.SetScheduler(schedulerAdapter)
+	}
+	
 	deps.ConversationService = conversation.New(
 		*deps.Configs,
 		deps.Mux,
@@ -114,6 +153,13 @@ func (a *App) setupDependencies() error {
 		deps.Logger,
 		a.ConversationRepo,
 	) // Create conversation service
+	
+	// Start the scheduler
+	go func() {
+		if err := a.SchedulerService.Start(context.Background()); err != nil {
+			a.Logger.Error("Failed to start scheduler:", err)
+		}
+	}()
 
 	a.ServerDeps = deps
 

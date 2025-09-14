@@ -21,6 +21,13 @@ var (
 	ErrTaskAlreadyCancelled = errors.New("task is already cancelled")
 )
 
+// TaskScheduler defines the interface for scheduling tasks (to avoid circular dependencies)
+type TaskScheduler interface {
+	ScheduleTaskExecution(ctx context.Context, taskID, userID uuid.UUID, executeAt time.Time) error
+	ScheduleTaskReminder(ctx context.Context, taskID, userID uuid.UUID, remindAt time.Time) error
+	ScheduleRecurringTask(ctx context.Context, taskID, userID uuid.UUID, nextRun time.Time) error
+}
+
 // TaskService defines the interface for task business logic
 type TaskService interface {
 	// Basic task management
@@ -64,10 +71,14 @@ type TaskService interface {
 	// Execution operations (for scheduler)
 	GetTasksToExecute(ctx context.Context, beforeTime time.Time, limit int) ([]TaskResponse, error)
 	ExecuteTask(ctx context.Context, taskID string) error
+	
+	// Scheduler integration
+	SetScheduler(scheduler TaskScheduler)
 }
 
 type taskService struct {
 	repository TaskRepository
+	scheduler  TaskScheduler
 	logger     *Logger.Logger
 }
 
@@ -90,6 +101,14 @@ func (s *taskService) CreateTask(ctx context.Context, userID string, req CreateT
 	if err := s.repository.Create(task); err != nil {
 		s.logger.Errorf("error creating task: %v", err)
 		return nil, fmt.Errorf("failed to create task: %w", err)
+	}
+
+	// Schedule the task if scheduler is available and task has scheduling requirements
+	if s.scheduler != nil {
+		if err := s.scheduleTaskIfNeeded(ctx, task); err != nil {
+			s.logger.Errorf("error scheduling task: %v", err)
+			// Don't fail task creation if scheduling fails, but log the error
+		}
 	}
 
 	s.logger.Infof("task created successfully: %s for user %s", task.ID, userID)
@@ -623,6 +642,56 @@ func (s *taskService) validateRecurrenceConfig(config *RecurrenceConfig) error {
 func NewTaskService(repository TaskRepository, logger *Logger.Logger) TaskService {
 	return &taskService{
 		repository: repository,
+		scheduler:  nil, // Will be set later to avoid circular dependencies
 		logger:     logger,
 	}
+}
+
+// SetScheduler sets the scheduler service (called after initialization to avoid circular dependencies)
+func (s *taskService) SetScheduler(scheduler TaskScheduler) {
+	s.scheduler = scheduler
+}
+
+// scheduleTaskIfNeeded schedules a task if it has scheduling requirements
+func (s *taskService) scheduleTaskIfNeeded(ctx context.Context, task *Task) error {
+	// Schedule task execution if it has a due date
+	if task.DueAt != nil {
+		err := s.scheduler.ScheduleTaskExecution(ctx, task.ID, task.UserID, *task.DueAt)
+		if err != nil {
+			return fmt.Errorf("failed to schedule task execution: %w", err)
+		}
+		s.logger.Infof("scheduled task execution for %s at %s", task.ID, task.DueAt.Format(time.RFC3339))
+	}
+
+	// Schedule task execution if it has a scheduled time
+	if task.ScheduledAt != nil {
+		err := s.scheduler.ScheduleTaskExecution(ctx, task.ID, task.UserID, *task.ScheduledAt)
+		if err != nil {
+			return fmt.Errorf("failed to schedule task execution: %w", err)
+		}
+		s.logger.Infof("scheduled task execution for %s at %s", task.ID, task.ScheduledAt.Format(time.RFC3339))
+	}
+
+	// Schedule reminder if task has a due date (remind 1 hour before)
+	if task.DueAt != nil {
+		reminderTime := task.DueAt.Add(-1 * time.Hour)
+		if reminderTime.After(time.Now()) {
+			err := s.scheduler.ScheduleTaskReminder(ctx, task.ID, task.UserID, reminderTime)
+			if err != nil {
+				return fmt.Errorf("failed to schedule task reminder: %w", err)
+			}
+			s.logger.Infof("scheduled task reminder for %s at %s", task.ID, reminderTime.Format(time.RFC3339))
+		}
+	}
+
+	// Schedule recurring task if applicable
+	if task.IsRecurring && task.RecurrenceConfig != nil && task.NextExecution != nil {
+		err := s.scheduler.ScheduleRecurringTask(ctx, task.ID, task.UserID, *task.NextExecution)
+		if err != nil {
+			return fmt.Errorf("failed to schedule recurring task: %w", err)
+		}
+		s.logger.Infof("scheduled recurring task for %s at %s", task.ID, task.NextExecution.Format(time.RFC3339))
+	}
+
+	return nil
 }
