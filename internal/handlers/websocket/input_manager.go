@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/xpanvictor/xarvis/internal/constants/prompts"
 	"github.com/xpanvictor/xarvis/internal/domains/conversation"
 	vss "github.com/xpanvictor/xarvis/internal/domains/sys_manager/voice_stream_system"
 	"github.com/xpanvictor/xarvis/internal/types"
@@ -64,11 +65,12 @@ func (im *InputStreamManager) HandleTextInput(
 	go im.handleResponseStream(ctx, session, outputCh)
 
 	// Process through conversation service
+	xarvisDef := prompts.DEFAULT_PROMPT.GetCurrentPrompt().ToMessage()
 	err := im.conversationService.ProcessMsgAsStream(
 		ctx,
 		session.UserID,
 		message,
-		[]types.Message{}, // TODO: Add system messages from conversation history
+		[]types.Message{xarvisDef},
 		outputCh,
 	)
 
@@ -192,11 +194,12 @@ func (im *InputStreamManager) HandleTranscribedText(
 	go im.handleResponseStream(ctx, session, outputCh)
 
 	// Process through conversation service
+	xarvisDef := prompts.DEFAULT_PROMPT.GetCurrentPrompt().ToMessage()
 	err := im.conversationService.ProcessMsgAsStream(
 		ctx,
 		session.UserID,
 		message,
-		[]types.Message{}, // TODO: Add system messages from conversation history
+		[]types.Message{xarvisDef}, //
 		outputCh,
 	)
 

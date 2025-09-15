@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { UserResponse, Conversation, Memory, Message } from '../services/api';
+import { UserResponse, Conversation, Memory, Message, ProjectResponse, NoteResponse, ListProjectsResponse, ListNotesResponse, TaskResponse, ListTasksResponse } from '../services/api';
 import { ConnectionState, ListeningState } from '../services/websocket';
 
 // Auth Store
@@ -270,4 +270,190 @@ export const useUIStore = create<UIState>((set) => ({
     setSidebarOpen: (sidebarOpen) => set({ sidebarOpen }),
     setCurrentPage: (currentPage) => set({ currentPage }),
     setTheme: (theme) => set({ theme }),
+}));
+
+// Projects Store
+interface ProjectsState {
+    projects: ProjectResponse[];
+    currentProject: ProjectResponse | null;
+    isLoading: boolean;
+    error: string | null;
+    pagination: {
+        total: number;
+        offset: number;
+        limit: number;
+    } | null;
+
+    // Actions
+    setProjects: (projects: ProjectResponse[], pagination?: { total: number; offset: number; limit: number }) => void;
+    addProject: (project: ProjectResponse) => void;
+    updateProject: (projectId: string, updates: Partial<ProjectResponse>) => void;
+    removeProject: (projectId: string) => void;
+    setCurrentProject: (project: ProjectResponse | null) => void;
+    setLoading: (loading: boolean) => void;
+    setError: (error: string | null) => void;
+    clearProjects: () => void;
+}
+
+export const useProjectsStore = create<ProjectsState>((set, get) => ({
+    projects: [],
+    currentProject: null,
+    isLoading: false,
+    error: null,
+    pagination: null,
+
+    setProjects: (projects, pagination) => set({
+        projects,
+        pagination: pagination || null
+    }),
+
+    addProject: (project) => set((state) => ({
+        projects: [project, ...state.projects]
+    })),
+
+    updateProject: (projectId, updates) => set((state) => ({
+        projects: state.projects.map(p => p.id === projectId ? { ...p, ...updates } : p),
+        currentProject: state.currentProject?.id === projectId ? { ...state.currentProject, ...updates } : state.currentProject
+    })),
+
+    removeProject: (projectId) => set((state) => ({
+        projects: state.projects.filter(p => p.id !== projectId),
+        currentProject: state.currentProject?.id === projectId ? null : state.currentProject
+    })),
+
+    setCurrentProject: (currentProject) => set({ currentProject }),
+
+    setLoading: (isLoading) => set({ isLoading }),
+
+    setError: (error) => set({ error }),
+
+    clearProjects: () => set({
+        projects: [],
+        currentProject: null,
+        pagination: null
+    })
+}));
+
+// Notes Store
+interface NotesState {
+    notes: NoteResponse[];
+    currentNote: NoteResponse | null;
+    isLoading: boolean;
+    error: string | null;
+    pagination: {
+        total: number;
+        offset: number;
+        limit: number;
+    } | null;
+
+    // Actions
+    setNotes: (notes: NoteResponse[], pagination?: { total: number; offset: number; limit: number }) => void;
+    addNote: (note: NoteResponse) => void;
+    updateNote: (noteId: string, updates: Partial<NoteResponse>) => void;
+    removeNote: (noteId: string) => void;
+    setCurrentNote: (note: NoteResponse | null) => void;
+    setLoading: (loading: boolean) => void;
+    setError: (error: string | null) => void;
+    clearNotes: () => void;
+}
+
+export const useNotesStore = create<NotesState>((set, get) => ({
+    notes: [],
+    currentNote: null,
+    isLoading: false,
+    error: null,
+    pagination: null,
+
+    setNotes: (notes, pagination) => set({
+        notes,
+        pagination: pagination || null
+    }),
+
+    addNote: (note) => set((state) => ({
+        notes: [note, ...state.notes]
+    })),
+
+    updateNote: (noteId, updates) => set((state) => ({
+        notes: state.notes.map(n => n.id === noteId ? { ...n, ...updates } : n),
+        currentNote: state.currentNote?.id === noteId ? { ...state.currentNote, ...updates } : state.currentNote
+    })),
+
+    removeNote: (noteId) => set((state) => ({
+        notes: state.notes.filter(n => n.id !== noteId),
+        currentNote: state.currentNote?.id === noteId ? null : state.currentNote
+    })),
+
+    setCurrentNote: (currentNote) => set({ currentNote }),
+
+    setLoading: (isLoading) => set({ isLoading }),
+
+    setError: (error) => set({ error }),
+
+    clearNotes: () => set({
+        notes: [],
+        currentNote: null,
+        pagination: null
+    })
+}));
+
+// Tasks Store
+interface TasksState {
+    tasks: TaskResponse[];
+    currentTask: TaskResponse | null;
+    isLoading: boolean;
+    error: string | null;
+    pagination: {
+        total: number;
+        offset: number;
+        limit: number;
+    } | null;
+
+    // Actions
+    setTasks: (tasks: TaskResponse[], pagination?: { total: number; offset: number; limit: number }) => void;
+    addTask: (task: TaskResponse) => void;
+    updateTask: (taskId: string, updates: Partial<TaskResponse>) => void;
+    removeTask: (taskId: string) => void;
+    setCurrentTask: (task: TaskResponse | null) => void;
+    setLoading: (loading: boolean) => void;
+    setError: (error: string | null) => void;
+    clearTasks: () => void;
+}
+
+export const useTasksStore = create<TasksState>((set, get) => ({
+    tasks: [],
+    currentTask: null,
+    isLoading: false,
+    error: null,
+    pagination: null,
+
+    setTasks: (tasks, pagination) => set({
+        tasks,
+        pagination: pagination || null
+    }),
+
+    addTask: (task) => set((state) => ({
+        tasks: [task, ...state.tasks]
+    })),
+
+    updateTask: (taskId, updates) => set((state) => ({
+        tasks: state.tasks.map(t => t.id === taskId ? { ...t, ...updates } : t),
+        currentTask: state.currentTask?.id === taskId ? { ...state.currentTask, ...updates } : state.currentTask
+    })),
+
+    removeTask: (taskId) => set((state) => ({
+        tasks: state.tasks.filter(t => t.id !== taskId),
+        currentTask: state.currentTask?.id === taskId ? null : state.currentTask
+    })),
+
+    setCurrentTask: (currentTask) => set({ currentTask }),
+
+    setLoading: (isLoading) => set({ isLoading }),
+
+    setError: (error) => set({ error }),
+
+    clearTasks: () => set({
+        tasks: [],
+        currentTask: null,
+        pagination: null
+    })
 }));

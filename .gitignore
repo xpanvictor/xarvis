@@ -11,6 +11,7 @@ generated/
 .air/
 out/
 api
+dist/
 
 # config files
 config_*.yaml

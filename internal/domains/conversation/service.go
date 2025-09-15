@@ -96,11 +96,12 @@ func (c *conversationService) ProcessMsgAsStream(ctx context.Context, userID uui
 
 	// process msg in brain
 	msgs := make([]types.Message, 0)
-	msgs = append(msgs, sysMsgs...)
 
 	// history for context
 	oldMsgs := c.historyContext(ctx, userID, msg)
 	msgs = append(msgs, oldMsgs...)
+
+	msgs = append(msgs, sysMsgs...)
 	msgs = append(msgs, *nmsg)
 	// Generate a session ID for this processing request
 	sessionID := uuid.New()

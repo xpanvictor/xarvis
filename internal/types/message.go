@@ -90,12 +90,12 @@ type Conversation struct {
 }
 
 func (m Memory) AsMsgForHistory() Message {
-	content := fmt.Sprintf(`Note for history; importance: %v; content: %v`, m.SaliencyScore, m.Content)
+	content := fmt.Sprintf(`This is just an history message: importance: %v; content: %v`, m.SaliencyScore, m.Content)
 	return Message{
 		Id:        m.ID,
 		Timestamp: m.CreatedAt,
 		Text:      content,
-		MsgRole:   assistant.SYSTEM,
+		MsgRole:   assistant.USER,
 		Tags:      []string{"Memory", string(m.SaliencyScore)},
 	}
 }

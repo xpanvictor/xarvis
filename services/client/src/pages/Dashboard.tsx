@@ -7,6 +7,7 @@ import { conversationAPI } from '../services/api';
 import webSocketService, { ConnectionState } from '../services/websocket';
 import audioService from '../services/audio';
 import pcmAudioPlayer from '../services/pcmAudioPlayer';
+import { streamingPCMAudioPlayer } from '../services/streamingAudioPlayer';
 import { Send, Settings, Plus, MessageSquare, Volume2, VolumeX } from 'lucide-react';
 import './Dashboard.css';
 
@@ -80,6 +81,7 @@ export const Dashboard: React.FC = () => {
             webSocketService.disconnect();
             audioService.cleanup();
             pcmAudioPlayer.cleanup();
+            streamingPCMAudioPlayer.cleanup();
         };
     }, [setConversation, setLoading, setError]);
 
@@ -104,8 +106,8 @@ export const Dashboard: React.FC = () => {
                 setSessionProcessing(true); // Mark session as processing
 
                 // Clear any previous audio collection when starting new session
-                console.log('🎵 Clearing previous audio collection for new session');
-                pcmAudioPlayer.startNewStream(false); // Clear but don't stop current playback
+                console.log('🎵 Stopping previous streaming audio for new session');
+                streamingPCMAudioPlayer.stop();
 
                 startStreamingMessage();
             }
@@ -159,70 +161,33 @@ export const Dashboard: React.FC = () => {
                 // Session is now complete - allow new messages
                 console.log('📝 MESSAGE_COMPLETE event - session finished, allowing new messages');
                 setSessionProcessing(false); // Allow new messages to start
-                // Fallback: if audio_complete did not arrive (or got lost),
-                // and we have collected PCM, trigger playback once.
-                if (!audioPlayTriggeredRef.current) {
-                    const muted = useConversationStore.getState().isMuted;
-                    const qlen = pcmAudioPlayer.getQueueLength();
-                    if (!muted && qlen > 0) {
-                        console.log('🎵 message_complete fallback - playing collected audio');
-                        audioPlayTriggeredRef.current = true;
-                        setTimeout(() => pcmAudioPlayer.playCollectedAudio(), 120);
-                    }
-                }
+                // Note: Streaming audio player handles playback continuously, no fallback needed
             } else if (eventName === 'audio_format') {
                 // Store audio format info for PCM conversion
                 console.log('🎵 Audio format received:', payload);
-                // Don't clear PCM data on format change - only set format
-                // Clear happens automatically when startNewStream is called with stop=true
-                pcmAudioPlayer.setAudioFormat(payload);
+                // Set format for streaming audio player
+                streamingPCMAudioPlayer.setAudioFormat(payload.sampleRate || 22050, payload.channels || 1);
                 // New stream beginning; allow a new play trigger for this message
                 audioPlayTriggeredRef.current = false;
             } else if (eventName === 'audio_complete') {
-                // ONLY for audio playback - no text completion
-                console.log('🎵 AUDIO_COMPLETE event - starting audio playback');
-                const qlen = pcmAudioPlayer.getQueueLength();
-                console.log(`🎵 Current PCM queue length: ${qlen} chunks`);
-
-                // Only trigger once per response
-                if (!audioPlayTriggeredRef.current) {
-                    console.log('🎵 Audio streaming complete - playing collected audio');
-                    audioPlayTriggeredRef.current = true;
-                    // Respect mute state for autoplay
-                    const muted = useConversationStore.getState().isMuted;
-                    console.log(`🎵 Muted state: ${muted}`);
-                    if (!muted) {
-                        // If the queue looks empty (rare out-of-order arrival), wait briefly then play
-                        const qlen = pcmAudioPlayer.getQueueLength();
-                        if (qlen === 0) {
-                            console.log('ℹ️ Audio queue empty at complete; retrying shortly');
-                            setTimeout(() => {
-                                if (pcmAudioPlayer.getQueueLength() > 0) {
-                                    pcmAudioPlayer.playCollectedAudio();
-                                } else {
-                                    // Attempt anyway in case of zero-length or silence
-                                    pcmAudioPlayer.playCollectedAudio();
-                                }
-                            }, 120);
-                        } else {
-                            pcmAudioPlayer.playCollectedAudio();
-                        }
-                    } else {
-                        console.log('🔇 Autoplay skipped due to mute');
-                    }
-                } else {
-                    console.log('ℹ️ Skipping duplicate audio_complete playback trigger');
-                }
+                // Audio streaming complete - for streaming player, this might be a signal to finish playback
+                console.log('🎵 AUDIO_COMPLETE event - audio streaming finished');
+                // Note: Streaming audio player handles playback continuously, so we don't need to trigger playback here
+                // This event just indicates the stream is complete
             }
         };
 
-        // Handle PCM audio data - collect for later playback
+        // Handle PCM audio data - stream for real-time playback
         const handlePCMAudio = (pcmData: ArrayBuffer) => {
             console.log(`🎵 PCM audio received: ${pcmData.byteLength} bytes, session processing: ${isSessionProcessing}`);
-            // Always collect PCM data regardless of session state
-            pcmAudioPlayer.addPCMChunk(pcmData);
-            const qlen = pcmAudioPlayer.getQueueLength();
-            console.log(`🎵 Total PCM chunks collected: ${qlen}`);
+            // Check mute state before streaming audio
+            const muted = useConversationStore.getState().isMuted;
+            if (!muted) {
+                streamingPCMAudioPlayer.addPCMChunk(pcmData);
+                console.log(`🎵 Streaming PCM chunk added, buffer health: ${streamingPCMAudioPlayer.getBufferHealth().toFixed(2)}`);
+            } else {
+                console.log('🔇 Skipping PCM audio streaming due to mute');
+            }
         };
 
         // Handle response messages (from websocket response case)

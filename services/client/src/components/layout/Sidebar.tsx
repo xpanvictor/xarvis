@@ -7,7 +7,7 @@ import {
     Network,
     User,
     Clock,
-    BarChart3,
+    StickyNote,
     Zap,
     LucideIcon
 } from 'lucide-react';
@@ -48,10 +48,10 @@ const sidebarItems: SidebarItem[] = [
         path: '/connections',
     },
     {
-        id: 'analytics',
-        label: 'Analytics',
-        icon: BarChart3,
-        path: '/analytics',
+        id: 'notes',
+        label: 'Notes',
+        icon: StickyNote,
+        path: '/notes',
     },
     {
         id: 'recent',

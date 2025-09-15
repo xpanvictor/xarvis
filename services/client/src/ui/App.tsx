@@ -4,7 +4,7 @@ import { AuthPage } from '../components/auth/AuthPage';
 import { Layout } from '../components/layout/Layout';
 import { ProtectedRoute, PublicRoute } from '../components/layout/ProtectedRoute';
 import { Dashboard } from '../pages/Dashboard';
-import { ProjectsPage, TasksPage, ConnectionsPage } from '../pages/PlaceholderPages';
+import { ProjectsPage, TasksPage, ConnectionsPage, NotesPage } from '../pages/PlaceholderPages';
 import { useAuthStore } from '../store';
 import { isAuthenticated, getCurrentUser } from '../services/api';
 import '../pages/Pages.css';
@@ -55,7 +55,7 @@ const App: React.FC = () => {
             <Route path="projects" element={<ProjectsPage />} />
             <Route path="tasks" element={<TasksPage />} />
             <Route path="connections" element={<ConnectionsPage />} />
-            <Route path="analytics" element={<div className="page-container"><div className="empty-state"><h3>Analytics Coming Soon</h3></div></div>} />
+            <Route path="notes" element={<NotesPage />} />
             <Route path="recent" element={<div className="page-container"><div className="empty-state"><h3>Recent Activity Coming Soon</h3></div></div>} />
             <Route path="profile" element={<div className="page-container"><div className="empty-state"><h3>Profile Coming Soon</h3></div></div>} />
             <Route path="settings" element={<div className="page-container"><div className="empty-state"><h3>Settings Coming Soon</h3></div></div>} />
