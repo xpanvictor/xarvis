@@ -220,11 +220,19 @@ func (b *Brain) processMsg(ctx context.Context, contractInput adapters.ContractI
 	err := b.mux.Stream(ctx, contractInput, &responseChannel)
 	if err != nil {
 		b.logger.Error(fmt.Sprintf("Mux streaming error: %v", err))
-		select {
-		case responseChannel <- []adapters.ContractResponseDelta{{Error: err}}:
-		default:
-			b.logger.Error("Could not send error through response channel")
-		}
+		// Use recover to prevent panic when sending on potentially closed channel
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					b.logger.Error(fmt.Sprintf("Recovered from panic while sending error: %v", r))
+				}
+			}()
+			select {
+			case responseChannel <- []adapters.ContractResponseDelta{{Error: err}}:
+			default:
+				b.logger.Error("Could not send error through response channel")
+			}
+		}()
 	}
 	// mux.Stream is responsible for closing the channel
 }
