@@ -203,7 +203,17 @@ export class StreamingPCMAudioPlayer {
 
     private scheduleChunkPlayback(audioData: Float32Array) {
         if (!this.audioContext) {
+            console.error('❌ No audio context available');
             return;
+        }
+
+        // Ensure audio context is running
+        if (this.audioContext.state !== 'running') {
+            console.warn(`⚠️ Audio context state: ${this.audioContext.state}, attempting to resume`);
+            this.audioContext.resume().catch(error => {
+                console.error('❌ Failed to resume audio context:', error);
+                return;
+            });
         }
 
         // Skip crossfade for now - test if basic chunking works
@@ -240,7 +250,14 @@ export class StreamingPCMAudioPlayer {
             }
         }
 
-        source.start(actualStartTime);
+        // Start at the precise scheduled time for seamless playback
+        try {
+            source.start(actualStartTime);
+            console.log(`▶️ Source started successfully at ${actualStartTime.toFixed(3)}s`);
+        } catch (error) {
+            console.error(`❌ Failed to start source at ${actualStartTime.toFixed(3)}s:`, error);
+            return;
+        }
 
         // Update next schedule time for seamless playback
         // No overlap - just butt chunks together precisely
@@ -255,9 +272,10 @@ export class StreamingPCMAudioPlayer {
             if (index > -1) {
                 this.scheduledSources.splice(index, 1);
             }
+            console.log(`✅ Source ended for chunk at ${actualStartTime.toFixed(3)}s`);
         };
 
-        console.log(`▶️ Scheduled chunk: ${audioBuffer.duration.toFixed(3)}s at ${actualStartTime.toFixed(3)}s`);
+        console.log(`▶️ Scheduled chunk: ${audioBuffer.duration.toFixed(3)}s at ${actualStartTime.toFixed(3)}s, current time: ${currentTime.toFixed(3)}s`);
 
         // Schedule next chunk with appropriate delay for larger chunks
         if (this.getTotalBufferedSamples() > 0) {
@@ -268,6 +286,7 @@ export class StreamingPCMAudioPlayer {
 
     // Stop streaming playback
     stop() {
+        console.log('🛑 Streaming audio stopped - clearing buffers');
         // Stop all scheduled sources
         this.scheduledSources.forEach(source => {
             try {

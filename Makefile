@@ -52,5 +52,8 @@ docs:
 	@echo "✅ Swagger documentation generated!"
 	@echo "📖 API docs available at: http://localhost:8088/swagger/index.html"
 
+prod:
+	$(DOCKER_COMPOSE) -f docker-compose.prod.yml up -d xarvis-core xarvis-client-prod traefik redis mosquitto stt-whisper tts-piper sys-models
+
 clean:
 	$(DOCKER_COMPOSE) down -v --remove-orphans

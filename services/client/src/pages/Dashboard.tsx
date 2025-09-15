@@ -134,9 +134,8 @@ export const Dashboard: React.FC = () => {
                 console.log('🚀 Starting new streaming message');
                 setSessionProcessing(true); // Mark session as processing
 
-                // Clear any previous audio collection when starting new session
-                console.log('🎵 Stopping previous streaming audio for new session');
-                streamingPCMAudioPlayer.stop();
+                // Don't stop previous audio - let it finish playing completely
+                // streamingPCMAudioPlayer.stop();
 
                 startStreamingMessage();
                 updateStreamingContent(content);
@@ -202,7 +201,26 @@ export const Dashboard: React.FC = () => {
             } else if (eventName === 'message_complete') {
                 // Session is now complete - allow new messages
                 console.log('📝 MESSAGE_COMPLETE event - session finished, allowing new messages');
-                setSessionProcessing(false); // Allow new messages to start
+                // Don't immediately set session processing to false if audio is still playing
+                const isAudioPlaying = streamingPCMAudioPlayer.isCurrentlyPlaying();
+                const bufferHealth = streamingPCMAudioPlayer.getBufferHealth();
+                console.log(`🎵 Audio status on message_complete: playing=${isAudioPlaying}, bufferHealth=${bufferHealth.toFixed(2)}`);
+
+                if (!isAudioPlaying && bufferHealth < 0.1) {
+                    // Audio is finished, safe to end session
+                    setSessionProcessing(false);
+                } else {
+                    // Audio still playing, delay session end
+                    console.log('🎵 Delaying session end - audio still playing');
+                    setTimeout(() => {
+                        const stillPlaying = streamingPCMAudioPlayer.isCurrentlyPlaying();
+                        const currentBufferHealth = streamingPCMAudioPlayer.getBufferHealth();
+                        console.log(`🎵 Checking delayed session end: playing=${stillPlaying}, bufferHealth=${currentBufferHealth.toFixed(2)}`);
+                        if (!stillPlaying && currentBufferHealth < 0.1) {
+                            setSessionProcessing(false);
+                        }
+                    }, 2000); // Check again in 2 seconds
+                }
                 // Note: Streaming audio player handles playback continuously, no fallback needed
             } else if (eventName === 'audio_format') {
                 // Store audio format info for PCM conversion
@@ -223,9 +241,12 @@ export const Dashboard: React.FC = () => {
         const handlePCMAudio = (pcmData: ArrayBuffer) => {
             const currentListeningState = useConversationStore.getState().listeningState;
             const muted = useConversationStore.getState().isMuted;
-            console.log(`🎵 PCM audio received: ${pcmData.byteLength} bytes, session processing: ${isSessionProcessing}, listening state: ${currentListeningState}, muted: ${muted}`);
+            const isAudioPlaying = streamingPCMAudioPlayer.isCurrentlyPlaying();
+            const bufferHealth = streamingPCMAudioPlayer.getBufferHealth();
+            console.log(`🎵 PCM audio received: ${pcmData.byteLength} bytes, session processing: ${isSessionProcessing}, listening state: ${currentListeningState}, muted: ${muted}, player playing: ${isAudioPlaying}, buffer health: ${bufferHealth.toFixed(2)}`);
 
-            if (!muted && (isSessionProcessing || currentListeningState === 'active')) {
+            // Allow audio if: not muted AND (session processing OR active listening OR audio currently playing)
+            if (!muted && (isSessionProcessing || currentListeningState === 'active' || isAudioPlaying)) {
                 console.log(`🎵 Playing PCM audio chunk`);
                 try {
                     streamingPCMAudioPlayer.addPCMChunk(pcmData);
@@ -240,7 +261,7 @@ export const Dashboard: React.FC = () => {
                     console.log(`📊 Audio metrics: health=${metrics.bufferHealth.toFixed(2)}, buffered=${metrics.bufferedDuration.toFixed(3)}s`);
                 }
             } else {
-                console.log(`🎵 Skipping PCM audio: muted=${muted}, sessionProcessing=${isSessionProcessing}, listeningState=${currentListeningState}`);
+                console.log(`🎵 Skipping PCM audio: muted=${muted}, sessionProcessing=${isSessionProcessing}, listeningState=${currentListeningState}, audioPlaying=${isAudioPlaying}`);
             }
         };        // Handle response messages (from websocket response case)
         const handleMessage = (responseData: any) => {
@@ -303,8 +324,9 @@ export const Dashboard: React.FC = () => {
 
         const handleListeningStateChange = (state: any) => {
             // Update listening state in store
-            console.log('🎤 Listening state change:', state);
+            console.log('🎤 Listening state change:', state, 'previous:', useConversationStore.getState().listeningState);
             setListeningState(state.mode as ListeningState);
+            console.log('🎤 New listening state:', state.mode);
         };
 
         webSocketService.on('onConnectionStateChange', handleConnectionChange);

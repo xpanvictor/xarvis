@@ -1,0 +1,204 @@
+## Compose version key is obsolete; omitted intentionally.
+
+x-health: &health
+  interval: 10s
+  timeout: 5s
+  retries: 12
+  start_period: 20s
+
+x-health-dev: &health-dev
+  interval: 15s
+  timeout: 10s
+  retries: 3
+  start_period: 30s
+
+networks:
+  edge:
+    name: xarvis_edge
+  backend:
+    name: xarvis_backend
+
+volumes:
+  mosquitto_data:
+  mosquitto_log:
+  qdrant_data:
+  ollama_data:
+  tei_data:
+  redis_data:
+
+
+services:
+  # ───────────────────────── Reverse Proxy (routes to xarvis.xpan9.tech domain) ─────────────────────────
+  traefik:
+    image: traefik:v3.1
+    restart: unless-stopped
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.network=xarvis_backend"
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "80:80"
+      - "8081:8080" # dashboard
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [ edge, backend ]
+    healthcheck:
+      test: [ "CMD", "wget", "-qO-", "http://localhost:8080/api/rawdata" ]
+      <<: *health
+    labels:
+      - "traefik.enable=true"
+
+  # ───────────────────────── Xarvis Core (Go) ─────────────────────────
+  xarvis-core:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+      target: dev
+    restart: unless-stopped
+    environment:
+      # In prod, read config from the repo root
+      XARVIS_CONFIG: /app/config_dev.yaml
+      PORT: "8088"
+    volumes:
+      # Live-reload: bind mount source into /app for Air
+      - ./:/app
+    # Ensure we run Air in dev, even if a cached image has an ENTRYPOINT
+    entrypoint: ""
+    command: [ "air", "-c", ".air.toml" ]
+    depends_on:
+      - mosquitto
+      - redis
+    networks: [ backend ]
+    ports: [ "8088:8088" ]
+    healthcheck:
+      test: [ "CMD", "wget", "-qO-", "http://localhost:8088/health" ]
+      <<: *health
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.xarvis.rule=Host(`xarvis.xpan9.tech`) && PathPrefix(`/api/v1`)"
+      - "traefik.http.routers.xarvis.entrypoints=web"
+      - "traefik.http.services.xarvis.loadbalancer.server.port=8088"
+
+  # ───────────────────────── Messaging (ESP audio/control) ─────────────────────────
+  mosquitto:
+    image: eclipse-mosquitto:2
+    restart: unless-stopped
+    networks: [ backend, edge ]
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+      - ./infra/mosquitto:/mosquitto/config
+    healthcheck:
+      test: [ "CMD-SHELL", "mosquitto -c /mosquitto/config/mosquitto.conf -p 0 -v >/dev/null 2>&1 || exit 0" ]
+      <<: *health
+    labels:
+      - "traefik.enable=false"
+
+  # ───────────────────────── Caching and Session Storage ─────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks: [ backend ]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --requirepass ""
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      <<: *health
+    labels:
+      - "traefik.enable=false"
+
+  # ───────────────────────── Voice (STT) ─────────────────────────
+  stt-whisper:
+    image: onerahmet/openai-whisper-asr-webservice:latest
+    platform: linux/amd64
+    environment:
+      ASR_MODEL: base.en
+      ASR_ENGINE: openai_whisper
+    networks: [ backend ]
+    ports: [ "8080:9000" ]
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:9000/health || curl -fsS http://localhost:9000/health || exit 1" ]
+      <<: *health
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.stt.rule=Host(`xarvis.xpan9.tech`) && PathPrefix(`/v1/stt`)"
+      - "traefik.http.routers.stt.entrypoints=web"
+      - "traefik.http.services.stt.loadbalancer.server.port=9000"
+
+  tts-piper:
+    image: rhasspy/wyoming-piper:latest
+    command:
+      - --voice
+      - en_US-libritts-high
+    environment:
+      PUID: 1000
+      PGID: 1000
+      TZ: ${TZ:-Etc/UTC}
+      PIPER_VOICE: en_US-libritts-high
+    networks: [ backend ]
+    ports: [ "5002:10200", "5003:5000" ]
+    volumes:
+      - ./infra/piper:/config
+      - ./infra/piper/models:/models
+    healthcheck:
+      test: [ "CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/10200'" ]
+      <<: *health
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.tts.rule=Host(`xarvis.xpan9.tech`) && PathPrefix(`/v1/tts`)"
+      - "traefik.http.routers.tts.entrypoints=web"
+      - "traefik.http.services.tts.loadbalancer.server.port=10200"
+
+  # ───────────────────────── Voice (System Models) ─────────────────────────
+  sys-models:
+    build:
+      context: ./services/sys-models
+      dockerfile: Dockerfile
+      target: development
+    restart: unless-stopped
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "8001"
+      LOG_LEVEL: "debug"
+    volumes:
+      - ./services/sys-models:/app
+    networks: [ backend ]
+    ports: [ "8001:8001" ]
+    healthcheck:
+      test: [ "CMD", "python", "-c", "import requests; requests.get('http://localhost:8001/health').raise_for_status()" ]
+      <<: *health
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.sys-models.rule=Host(`xarvis.xpan9.tech`) && PathPrefix(`/v1/models`)"
+      - "traefik.http.routers.sys-models.entrypoints=web"
+      - "traefik.http.services.sys-models.loadbalancer.server.port=8001"
+
+  # ───────────────────────── Web Client (Production) ─────────────────────────
+  xarvis-client-prod:
+    build:
+      context: ./services/client
+      dockerfile: Dockerfile
+      target: production
+      args:
+        VITE_API_URL: https://xarvis.xpan9.tech/api/v1
+    restart: unless-stopped
+    networks: [ backend ]
+    ports: [ "3000:80" ]
+    depends_on:
+      - xarvis-core
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:80" ]
+      <<: *health
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.client-prod.rule=Host(`xarvis.xpan9.tech`)"
+      - "traefik.http.routers.client-prod.entrypoints=web"
+      - "traefik.http.routers.client-prod.priority=1"
+      - "traefik.http.services.client-prod.loadbalancer.server.port=80"
