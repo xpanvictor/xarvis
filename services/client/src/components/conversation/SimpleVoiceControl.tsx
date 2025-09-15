@@ -20,6 +20,8 @@ export const SimpleVoiceControl: React.FC<SimpleVoiceControlProps> = ({
 
     const [isPassiveStreaming, setIsPassiveStreaming] = useState(false);
     const [isPushToTalkActive, setIsPushToTalkActive] = useState(false);
+    const [isBackendActive, setIsBackendActive] = useState(false);
+    const [backendListeningMode, setBackendListeningMode] = useState<'passive' | 'active'>('passive');
 
     // Start passive streaming when component mounts and WebSocket is connected
     useEffect(() => {
@@ -32,19 +34,18 @@ export const SimpleVoiceControl: React.FC<SimpleVoiceControlProps> = ({
 
     // Handle listening state changes from backend
     useEffect(() => {
-        const handleListeningModeChange = (eventName: string, payload: any) => {
-            if (eventName === 'listening_mode_change') {
-                const newMode = payload?.data;
-                console.log("🎧 Backend listening mode change:", newMode, payload);
-                // We don't need to track active mode locally since push-to-talk handles it
+        const handleListeningStateChange = (state: any) => {
+            console.log("🎧 Backend listening state change:", state);
+            if (state.mode === 'active' || state.mode === 'passive') {
+                setBackendListeningMode(state.mode);
             }
         };
 
-        // Listen for backend events
-        webSocketService.on('onEvent', handleListeningModeChange);
+        // Listen for backend listening state changes
+        webSocketService.on('onListeningStateChange', handleListeningStateChange);
 
         return () => {
-            webSocketService.off('onEvent');
+            webSocketService.off('onListeningStateChange');
         };
     }, []);
 
@@ -62,6 +63,7 @@ export const SimpleVoiceControl: React.FC<SimpleVoiceControlProps> = ({
             audioService.startStreaming();
             await audioService.startRecording();
             setIsPassiveStreaming(true);
+            setBackendListeningMode('passive'); // Reset to passive when starting
             console.log('Started passive audio streaming');
         } catch (error) {
             console.error('Failed to start passive streaming:', error);
@@ -100,6 +102,7 @@ export const SimpleVoiceControl: React.FC<SimpleVoiceControlProps> = ({
     const getStatusText = () => {
         if (!isConnected) return 'Disconnected';
         if (isPushToTalkActive) return 'Push-to-Talk Active';
+        if (backendListeningMode === 'active') return 'Active Listening';
         if (isPassiveStreaming) return 'Passive Listening';
         return 'Idle';
     };
@@ -107,6 +110,7 @@ export const SimpleVoiceControl: React.FC<SimpleVoiceControlProps> = ({
     const getStatusClass = () => {
         if (!isConnected) return 'disconnected';
         if (isPushToTalkActive) return 'push-to-talk';
+        if (backendListeningMode === 'active') return 'active';
         if (isPassiveStreaming) return 'passive';
         return 'idle';
     };

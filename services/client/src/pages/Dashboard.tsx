@@ -4,7 +4,7 @@ import { ChatThread } from '../components/conversation/ChatThread';
 import { SimpleVoiceControl } from '../components/conversation/SimpleVoiceControl';
 import { useConversationStore, useUIStore } from '../store';
 import { conversationAPI } from '../services/api';
-import webSocketService, { ConnectionState } from '../services/websocket';
+import webSocketService, { ConnectionState, ListeningState } from '../services/websocket';
 import audioService from '../services/audio';
 import pcmAudioPlayer from '../services/pcmAudioPlayer';
 import { streamingPCMAudioPlayer } from '../services/streamingAudioPlayer';
@@ -24,6 +24,7 @@ export const Dashboard: React.FC = () => {
         isSessionProcessing,
         setConnectionState,
         setSessionProcessing,
+        setListeningState,
         streamingMessage,
         startStreamingMessage,
         updateStreamingContent,
@@ -39,6 +40,18 @@ export const Dashboard: React.FC = () => {
     const [inputMode, setInputMode] = useState<'text' | 'voice'>('text');
     const [showVoiceControls, setShowVoiceControls] = useState(false);
     const [viewMode, setViewMode] = useState<'split' | 'chat' | 'memory'>('split');
+
+    // Handle input mode changes - stop audio streaming when switching to text
+    const handleInputModeChange = (mode: 'text' | 'voice') => {
+        if (mode === 'text' && inputMode === 'voice') {
+            // Stop audio streaming when switching to text mode
+            console.log('🔄 Switching to text mode - stopping audio streaming');
+            audioService.stopRecording();
+            audioService.stopStreaming();
+            streamingPCMAudioPlayer.stop();
+        }
+        setInputMode(mode);
+    };
 
     // Initialize services and load conversation
     useEffect(() => {
@@ -59,6 +72,7 @@ export const Dashboard: React.FC = () => {
 
                 // Pre-warm audio context for smoother playback
                 await streamingPCMAudioPlayer.prewarm();
+                console.log('🎵 Streaming PCM player prewarmed, initialized:', streamingPCMAudioPlayer['isInitialized']);
 
                 // Sync mute state from persisted audio service setting
                 const savedMuted = audioService.isMutedState();
@@ -207,12 +221,18 @@ export const Dashboard: React.FC = () => {
 
         // Handle PCM audio data - stream for real-time playback
         const handlePCMAudio = (pcmData: ArrayBuffer) => {
-            console.log(`🎵 PCM audio received: ${pcmData.byteLength} bytes, session processing: ${isSessionProcessing}`);
-            // Only play audio if session is still processing AND not muted
+            const currentListeningState = useConversationStore.getState().listeningState;
             const muted = useConversationStore.getState().isMuted;
-            if (!muted && isSessionProcessing) {
-                streamingPCMAudioPlayer.addPCMChunk(pcmData);
-                console.log(`🎵 Streaming PCM chunk added, buffer health: ${streamingPCMAudioPlayer.getBufferHealth().toFixed(2)}`);
+            console.log(`🎵 PCM audio received: ${pcmData.byteLength} bytes, session processing: ${isSessionProcessing}, listening state: ${currentListeningState}, muted: ${muted}`);
+
+            if (!muted && (isSessionProcessing || currentListeningState === 'active')) {
+                console.log(`🎵 Playing PCM audio chunk`);
+                try {
+                    streamingPCMAudioPlayer.addPCMChunk(pcmData);
+                    console.log(`🎵 Streaming PCM chunk added, buffer health: ${streamingPCMAudioPlayer.getBufferHealth().toFixed(2)}`);
+                } catch (error) {
+                    console.error('🎵 Error adding PCM chunk:', error);
+                }
 
                 // Log performance metrics very infrequently for larger chunks
                 if (Math.random() < 0.01) { // 1% chance to log
@@ -220,11 +240,7 @@ export const Dashboard: React.FC = () => {
                     console.log(`📊 Audio metrics: health=${metrics.bufferHealth.toFixed(2)}, buffered=${metrics.bufferedDuration.toFixed(3)}s`);
                 }
             } else {
-                if (muted) {
-                    console.log('🔇 Skipping PCM audio streaming due to mute');
-                } else if (!isSessionProcessing) {
-                    console.log('⏹️ Skipping PCM audio streaming - session not processing');
-                }
+                console.log(`🎵 Skipping PCM audio: muted=${muted}, sessionProcessing=${isSessionProcessing}, listeningState=${currentListeningState}`);
             }
         };        // Handle response messages (from websocket response case)
         const handleMessage = (responseData: any) => {
@@ -285,13 +301,21 @@ export const Dashboard: React.FC = () => {
             setConnectionState(state);
         };
 
+        const handleListeningStateChange = (state: any) => {
+            // Update listening state in store
+            console.log('🎤 Listening state change:', state);
+            setListeningState(state.mode as ListeningState);
+        };
+
         webSocketService.on('onConnectionStateChange', handleConnectionChange);
+        webSocketService.on('onListeningStateChange', handleListeningStateChange);
 
         return () => {
             // Clean up listeners when component unmounts
             webSocketService.off('onConnectionStateChange');
+            webSocketService.off('onListeningStateChange');
         };
-    }, [setConnectionState]);
+    }, [setConnectionState, setListeningState]);
 
     const handleSendMessage = async () => {
         if (!inputMessage.trim()) return;
@@ -429,13 +453,13 @@ export const Dashboard: React.FC = () => {
                     <div className="input-modes">
                         <button
                             className={`mode-button ${inputMode === 'text' ? 'active' : ''}`}
-                            onClick={() => setInputMode('text')}
+                            onClick={() => handleInputModeChange('text')}
                         >
                             Text
                         </button>
                         <button
                             className={`mode-button ${inputMode === 'voice' ? 'active' : ''}`}
-                            onClick={() => setInputMode('voice')}
+                            onClick={() => handleInputModeChange('voice')}
                         >
                             Voice
                         </button>

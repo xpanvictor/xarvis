@@ -12,6 +12,7 @@ import (
 	audioring "github.com/xpanvictor/xarvis/pkg/io/stt/audioRing"
 	"github.com/xpanvictor/xarvis/pkg/io/stt/vad"
 	"github.com/xpanvictor/xarvis/pkg/io/stt/whisper"
+	"github.com/xpanvictor/xarvis/pkg/utils"
 )
 
 // VSSMode represents the current listening mode
@@ -264,8 +265,8 @@ func (v *VSS) HandleTranscription(tscp whisper.TranscriptionResponse) {
 		// todo: use model to check if transcription is worth listening
 		// for now just word search
 		v.logger.Infof("checking for word in xarvis: %v", tscp.Text)
-		if postTscp := strings.SplitN(tscp.Text, "xarvis", 2); len(postTscp) > 1 {
-			postStr := postTscp[1]
+		keywords := []string{"xarvis", "assistant"}
+		if utils.CheckContainsSubStrings(tscp.Text, keywords) {
 			// change to active mode
 			v.SetMode(ActiveListening)
 			v.logger.Infof("sent active mode")
@@ -273,7 +274,7 @@ func (v *VSS) HandleTranscription(tscp whisper.TranscriptionResponse) {
 			// discard buffer
 			v.transcriptionBuffer = v.transcriptionBuffer[:0]
 			// push last transcription
-			tscp.Text = postStr
+			// tscp.Text = postStr
 			v.transcriptionBuffer = append(v.transcriptionBuffer, tscp)
 		}
 	} else {

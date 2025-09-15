@@ -64,13 +64,15 @@ export class StreamingPCMAudioPlayer {
     // Add PCM chunk to streaming buffer
     async addPCMChunk(pcmData: ArrayBuffer) {
         try {
+            console.log(`🎵 addPCMChunk called with ${pcmData.byteLength} bytes`);
             await this.ensureAudioContext();
 
             if (!this.audioContext || !this.isInitialized) {
-                console.error('❌ Audio context not ready for streaming');
+                console.error('❌ Audio context not ready for streaming - context:', !!this.audioContext, 'initialized:', this.isInitialized);
                 return;
             }
 
+            console.log(`🎵 Audio context ready, processing chunk`);
             // Convert PCM to Float32Array
             const audioData = this.pcmToFloat32Array(pcmData);
 
