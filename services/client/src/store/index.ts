@@ -185,7 +185,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     }),
 
     completeStreamingMessage: () => set((state) => {
-        if (state.streamingMessage) {
+        if (state.streamingMessage && state.streamingMessage.content && state.streamingMessage.content.trim()) {
             // Add the completed streaming message to recent messages
             const completedMessage: Message = {
                 id: `stream_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -205,8 +205,12 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
                 recentMessages: updatedMessages.slice(-20),
                 streamingMessage: null // Clear the streaming message completely
             };
+        } else {
+            // Just clear the streaming message if it's empty
+            return {
+                streamingMessage: null
+            };
         }
-        return state;
     }),
 
     setStreamingAudio: (audioBlob) => set((state) => ({

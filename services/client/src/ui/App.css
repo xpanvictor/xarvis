@@ -682,8 +682,10 @@ body {
 .project-content {
   flex: 1;
   overflow-y: auto;
-  padding: 1rem 2rem; /* small breathing room */
-  max-width: 2000px; /* widen more */
+  padding: 1rem 2rem;
+  /* small breathing room */
+  max-width: 2000px;
+  /* widen more */
   margin: 0 auto;
   width: 100%;
 }
@@ -692,7 +694,8 @@ body {
 .notebook-content {
   background: transparent;
   border-radius: 0;
-  padding: 1rem 2rem; /* slight content padding */
+  padding: 1rem 2rem;
+  /* slight content padding */
   border: none;
   line-height: 1.6;
 }
@@ -700,7 +703,8 @@ body {
 /* Journal page feel: subtle ruled lines and margin */
 .journal-page {
   position: relative;
-  background: transparent; /* drop margin line and ruled background */
+  background: transparent;
+  /* drop margin line and ruled background */
   padding-left: 0;
 }
 
@@ -776,9 +780,17 @@ body {
   border: 3px solid #0a0a0a;
 }
 
-.timeline-item.note::before { background: #00acc1; }
-.timeline-item.progress::before { background: #64ffda; }
-.timeline-item.created::before { background: #f59e0b; }
+.timeline-item.note::before {
+  background: #00acc1;
+}
+
+.timeline-item.progress::before {
+  background: #64ffda;
+}
+
+.timeline-item.created::before {
+  background: #f59e0b;
+}
 
 .timeline-time {
   display: flex;
@@ -790,11 +802,38 @@ body {
   margin-bottom: 0.5rem;
 }
 
-.timeline-content { display: flex; flex-direction: column; gap: 0.5rem; }
-.timeline-label { display: inline-flex; align-items: center; gap: 0.5rem; color: #e5e7eb; font-weight: 600; }
-.timeline-by { color: #9ca3af; font-weight: 500; margin-left: 0.25rem; }
-.timeline-details { color: #e5e7eb; line-height: 1.7; font-size: 0.95rem; }
-.timeline-tags { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.25rem; }
+.timeline-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.timeline-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #e5e7eb;
+  font-weight: 600;
+}
+
+.timeline-by {
+  color: #9ca3af;
+  font-weight: 500;
+  margin-left: 0.25rem;
+}
+
+.timeline-details {
+  color: #e5e7eb;
+  line-height: 1.7;
+  font-size: 0.95rem;
+}
+
+.timeline-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
 
 .notebook-section {
   margin-bottom: 2rem;

@@ -94,14 +94,26 @@ export const Dashboard: React.FC = () => {
         const handleStreamingText = (content: string, isComplete: boolean) => {
             console.log(`📝 handleStreamingText: content="${content}", isComplete=${isComplete}, hasExistingMessage=${!!streamingMessage}, sessionProcessing=${isSessionProcessing}`);
 
-            // Don't start new messages if session is still processing
-            if (isSessionProcessing && !streamingMessage && content && content.trim()) {
-                console.log('⚠️ Blocking new message start - session still processing');
+            // Skip empty content unless it's a completion signal
+            if (!content && !isComplete) {
+                console.log('📝 Skipping empty streaming text content');
                 return;
             }
 
-            // Only start streaming if we have actual content
-            if (!streamingMessage && content && content.trim()) {
+            // If we have content and there's an existing streaming message, always update it
+            if (content && streamingMessage) {
+                console.log('📝 Updating existing streaming message');
+                // Accumulate content
+                const currentContent = streamingMessage.content || '';
+                const newContent = currentContent + content;
+                updateStreamingContent(newContent);
+            }
+            // If we have content and no existing message, only start new message if session not processing
+            else if (content && content.trim() && !streamingMessage) {
+                if (isSessionProcessing) {
+                    console.log('⚠️ Blocking new message start - session still processing');
+                    return;
+                }
                 console.log('🚀 Starting new streaming message');
                 setSessionProcessing(true); // Mark session as processing
 
@@ -110,14 +122,16 @@ export const Dashboard: React.FC = () => {
                 streamingPCMAudioPlayer.stop();
 
                 startStreamingMessage();
-            }
-
-            if (content) {
                 updateStreamingContent(content);
             }
 
             if (isComplete) {
-                completeStreamingMessage();
+                console.log('📝 Completion signal received - completing streaming message');
+                if (streamingMessage && streamingMessage.isStreaming) {
+                    completeStreamingMessage();
+                } else {
+                    console.log('📝 Completion signal received but no active streaming message to complete');
+                }
                 // NOTE: Don't end session processing here - wait for message_complete
             }
         };
@@ -131,20 +145,29 @@ export const Dashboard: React.FC = () => {
         const handleTextDelta = (index: number, text: string) => {
             console.log(`📝 Text delta: index=${index}, text="${text}", hasExistingMessage=${!!streamingMessage}`);
 
-            if (index === 1 || !streamingMessage) {
-                // Start of new message; if prior streaming bubble exists,
-                // finalize it so it remains in the history, then start fresh.
-                console.log('🚀 Starting new message from text delta');
-                if (streamingMessage && streamingMessage.content) {
-                    completeStreamingMessage();
-                }
+            // Skip empty text deltas
+            if (!text || !text.trim()) {
+                console.log('📝 Skipping empty text delta');
+                return;
+            }
+
+            // If there's already a streaming message with the same content, skip
+            if (streamingMessage && streamingMessage.content === text) {
+                console.log('📝 Skipping text delta - content already matches streaming message');
+                return;
+            }
+
+            // Only start new message if there's no existing streaming message
+            // (handleStreamingText should have handled this already)
+            if (!streamingMessage && text && text.trim()) {
+                console.log('🚀 Starting new message from text delta (fallback)');
                 startStreamingMessage();
                 updateStreamingContent(text);
-            } else {
+            } else if (streamingMessage && text) {
                 // Continue streaming message - append text
-                const currentContent = streamingMessage?.content || '';
+                const currentContent = streamingMessage.content || '';
                 const newContent = currentContent + text;
-                console.log(`📝 Appending text: "${text}" to existing content: "${currentContent}" = "${newContent}"`);
+                console.log(`📝 Appending text delta: "${text}" to existing: "${currentContent}" = "${newContent}"`);
                 updateStreamingContent(newContent);
             }
         };
@@ -156,7 +179,9 @@ export const Dashboard: React.FC = () => {
             if (eventName === 'text_complete') {
                 // ONLY text_complete should stop UI and push to queue
                 console.log('📝 TEXT_COMPLETE event - completing streaming message');
-                completeStreamingMessage();
+                if (streamingMessage && streamingMessage.isStreaming) {
+                    completeStreamingMessage();
+                }
             } else if (eventName === 'message_complete') {
                 // Session is now complete - allow new messages
                 console.log('📝 MESSAGE_COMPLETE event - session finished, allowing new messages');
@@ -180,7 +205,7 @@ export const Dashboard: React.FC = () => {
         // Handle PCM audio data - stream for real-time playback
         const handlePCMAudio = (pcmData: ArrayBuffer) => {
             console.log(`🎵 PCM audio received: ${pcmData.byteLength} bytes, session processing: ${isSessionProcessing}`);
-            // Check mute state before streaming audio
+            // Only skip audio if muted - allow audio to play even after text completion
             const muted = useConversationStore.getState().isMuted;
             if (!muted) {
                 streamingPCMAudioPlayer.addPCMChunk(pcmData);
@@ -194,7 +219,13 @@ export const Dashboard: React.FC = () => {
         const handleMessage = (responseData: any) => {
             console.log('📨 Received message response:', responseData);
 
-            if ((responseData.type === 'text' || responseData.type === 'text_delta') && responseData.content) {
+            // Skip text_delta and text_complete types as they're handled by streaming handlers
+            if (responseData.type === 'text_delta' || responseData.type === 'text_complete') {
+                console.log('📝 Skipping text_delta/text_complete in handleMessage - handled by streaming');
+                return;
+            }
+
+            if ((responseData.type === 'text') && responseData.content) {
                 console.log('📝 Processing text response content:', responseData.content);
 
                 // Check if this is a new message or continuation
@@ -203,10 +234,10 @@ export const Dashboard: React.FC = () => {
                     startStreamingMessage();
                     updateStreamingContent(responseData.content);
                 } else {
-                    // For text_delta, append to existing content
+                    // For text, append to existing content
                     const currentContent = streamingMessage?.content || '';
                     const newContent = currentContent + responseData.content;
-                    console.log(`📝 Appending text delta: "${responseData.content}" to existing: "${currentContent}" = "${newContent}"`);
+                    console.log(`📝 Appending text: "${responseData.content}" to existing: "${currentContent}" = "${newContent}"`);
                     updateStreamingContent(newContent);
                 }
 
@@ -278,6 +309,8 @@ export const Dashboard: React.FC = () => {
                 if (sm && sm.isStreaming && sm.content) {
                     completeStreamingMessage();
                 }
+                // Reset session processing for new request
+                setSessionProcessing(false);
                 webSocketService.sendTextMessage(inputMessage);
             } else {
                 // Fallback to API only if WebSocket is not connected

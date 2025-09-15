@@ -108,7 +108,6 @@ func (s *AsynqSchedulerService) ScheduleTask(ctx context.Context, req *TaskExecu
 
 	s.logger.Infof("payload-i: %+v", payload)
 
-
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("failed to marshal job payload: %w", err)

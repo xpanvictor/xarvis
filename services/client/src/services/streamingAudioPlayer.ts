@@ -7,8 +7,8 @@ export class StreamingPCMAudioPlayer {
     private bufferedChunks: Float32Array[] = [];
     private scheduledSources: AudioBufferSourceNode[] = [];
     private nextScheduleTime = 0;
-    private minBufferDuration = 0.05; // 50ms minimum buffer before starting
-    private chunkDuration = 0.02; // 20ms chunks for ultra-smooth playback
+    private minBufferDuration = 0.015; // 15ms minimum buffer before starting
+    private chunkDuration = 0.005; // 5ms chunks for ultra-smooth playback
     private isInitialized = false;
     private lastScheduledTime = 0;
 
@@ -116,7 +116,7 @@ export class StreamingPCMAudioPlayer {
                 return; // Wait for more buffer
             }
 
-            // Start playing - set initial schedule time to current time
+            // Start playing - ALWAYS set initial schedule time to current time + small offset
             this.isPlaying = true;
             this.nextScheduleTime = this.audioContext.currentTime + 0.01; // Start 10ms from now
             console.log('▶️ Starting seamless streaming audio playback');
@@ -194,11 +194,23 @@ export class StreamingPCMAudioPlayer {
 
         // Schedule playback at the calculated time
         const startTime = this.nextScheduleTime;
-        source.start(startTime);
+        const currentTime = this.audioContext.currentTime;
+
+        // If the scheduled time is in the past, schedule immediately with minimal offset
+        const actualStartTime = Math.max(startTime, currentTime + 0.001);
+
+        // If we're significantly behind schedule, reset to current time + small offset
+        const scheduleLag = currentTime - startTime;
+        if (scheduleLag > 0.01) { // More than 10ms behind
+            this.nextScheduleTime = currentTime + 0.002; // Reset schedule time
+            console.log(`⏰ Schedule lag detected (${scheduleLag.toFixed(3)}s), resetting schedule time`);
+        }
+
+        source.start(actualStartTime);
 
         // Update next schedule time to start immediately after this chunk ends
         // This ensures seamless, gapless playback
-        this.nextScheduleTime = startTime + audioBuffer.duration;
+        this.nextScheduleTime = actualStartTime + audioBuffer.duration;
 
         // Track the source for cleanup
         this.scheduledSources.push(source);
@@ -211,7 +223,7 @@ export class StreamingPCMAudioPlayer {
             }
         };
 
-        console.log(`▶️ Scheduled seamless chunk: ${audioBuffer.duration.toFixed(3)}s at ${startTime.toFixed(3)}s, next at ${this.nextScheduleTime.toFixed(3)}s`);
+        console.log(`▶️ Scheduled seamless chunk: ${audioBuffer.duration.toFixed(3)}s at ${actualStartTime.toFixed(3)}s (scheduled: ${startTime.toFixed(3)}s, current: ${currentTime.toFixed(3)}s), next at ${this.nextScheduleTime.toFixed(3)}s`);
 
         // Schedule next chunk if we have more data
         if (this.getTotalBufferedSamples() > 0) {

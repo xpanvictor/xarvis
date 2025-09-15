@@ -316,7 +316,7 @@ class WebSocketService {
                     if (responseData.type === 'text_delta') {
                         console.log('📝 TEXT_DELTA: Emitting text delta:', responseData.content);
                         this.emit('onStreamingText', responseData.content, false); // Not complete yet
-                        this.emit('onTextDelta', 0, responseData.content); // Also emit text delta event
+                        // Don't emit onTextDelta to avoid conflicts - handleStreamingText handles this
                         break;
                     }
 
