@@ -25,6 +25,7 @@ volumes:
   ollama_data:
   tei_data:
   redis_data:
+  traefik_ssl:
 
 
 services:
@@ -37,17 +38,29 @@ services:
       - "--providers.docker=true"
       - "--providers.docker.network=xarvis_backend"
       - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.letsencrypt.acme.email=xpanvictor@gmail.com"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
     ports:
       - "80:80"
+      - "443:443"
       - "8081:8080" # dashboard
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik_ssl:/letsencrypt
     networks: [ edge, backend ]
     healthcheck:
       test: [ "CMD", "wget", "-qO-", "http://localhost:8080/api/rawdata" ]
       <<: *health
     labels:
       - "traefik.enable=true"
+      # HTTP to HTTPS redirect
+      - "traefik.http.routers.http-catchall.rule=hostregexp(`{host:.+}`)"
+      - "traefik.http.routers.http-catchall.entrypoints=web"
+      - "traefik.http.routers.http-catchall.middlewares=redirect-to-https"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
 
   # ───────────────────────── Xarvis Core (Go) ─────────────────────────
   xarvis-core:
@@ -77,7 +90,8 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.xarvis.rule=Host(`xarvis.xpan9.tech`) && PathPrefix(`/api/v1`)"
-      - "traefik.http.routers.xarvis.entrypoints=web"
+      - "traefik.http.routers.xarvis.entrypoints=websecure"
+      - "traefik.http.routers.xarvis.tls.certresolver=letsencrypt"
       - "traefik.http.services.xarvis.loadbalancer.server.port=8088"
 
   # ───────────────────────── Messaging (ESP audio/control) ─────────────────────────
@@ -129,7 +143,8 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.stt.rule=Host(`xarvis.xpan9.tech`) && PathPrefix(`/v1/stt`)"
-      - "traefik.http.routers.stt.entrypoints=web"
+      - "traefik.http.routers.stt.entrypoints=websecure"
+      - "traefik.http.routers.stt.tls.certresolver=letsencrypt"
       - "traefik.http.services.stt.loadbalancer.server.port=9000"
 
   tts-piper:
@@ -153,7 +168,8 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.tts.rule=Host(`xarvis.xpan9.tech`) && PathPrefix(`/v1/tts`)"
-      - "traefik.http.routers.tts.entrypoints=web"
+      - "traefik.http.routers.tts.entrypoints=websecure"
+      - "traefik.http.routers.tts.tls.certresolver=letsencrypt"
       - "traefik.http.services.tts.loadbalancer.server.port=10200"
 
   # ───────────────────────── Voice (System Models) ─────────────────────────
@@ -177,7 +193,8 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.sys-models.rule=Host(`xarvis.xpan9.tech`) && PathPrefix(`/v1/models`)"
-      - "traefik.http.routers.sys-models.entrypoints=web"
+      - "traefik.http.routers.sys-models.entrypoints=websecure"
+      - "traefik.http.routers.sys-models.tls.certresolver=letsencrypt"
       - "traefik.http.services.sys-models.loadbalancer.server.port=8001"
 
   # ───────────────────────── Web Client (Production) ─────────────────────────
@@ -199,6 +216,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.client-prod.rule=Host(`xarvis.xpan9.tech`)"
-      - "traefik.http.routers.client-prod.entrypoints=web"
+      - "traefik.http.routers.client-prod.entrypoints=websecure"
+      - "traefik.http.routers.client-prod.tls.certresolver=letsencrypt"
       - "traefik.http.routers.client-prod.priority=1"
       - "traefik.http.services.client-prod.loadbalancer.server.port=80"
