@@ -89,10 +89,12 @@ services:
       <<: *health
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.xarvis.rule=Host(`xarvis.xpan9.tech`) && PathPrefix(`/api/v1`)"
+      - "traefik.http.routers.xarvis.rule=Host(`xarvis.xpan9.tech`) && PathPrefix(`/v1/backend`)"
       - "traefik.http.routers.xarvis.entrypoints=websecure"
       - "traefik.http.routers.xarvis.tls.certresolver=letsencrypt"
       - "traefik.http.services.xarvis.loadbalancer.server.port=8088"
+      - "traefik.http.middlewares.xarvis-strip.stripprefix.prefixes=/v1/backend"
+      - "traefik.http.routers.xarvis.middlewares=xarvis-strip@docker"
 
   # ───────────────────────── Messaging (ESP audio/control) ─────────────────────────
   mosquitto:
@@ -146,6 +148,8 @@ services:
       - "traefik.http.routers.stt.entrypoints=websecure"
       - "traefik.http.routers.stt.tls.certresolver=letsencrypt"
       - "traefik.http.services.stt.loadbalancer.server.port=9000"
+      - "traefik.http.middlewares.stt-strip.stripprefix.prefixes=/v1/stt"
+      - "traefik.http.routers.stt.middlewares=stt-strip@docker"
 
   tts-piper:
     image: rhasspy/wyoming-piper:latest
@@ -171,6 +175,8 @@ services:
       - "traefik.http.routers.tts.entrypoints=websecure"
       - "traefik.http.routers.tts.tls.certresolver=letsencrypt"
       - "traefik.http.services.tts.loadbalancer.server.port=10200"
+      - "traefik.http.middlewares.tts-strip.stripprefix.prefixes=/v1/tts"
+      - "traefik.http.routers.tts.middlewares=tts-strip@docker"
 
   # ───────────────────────── Voice (System Models) ─────────────────────────
   sys-models:
@@ -196,15 +202,16 @@ services:
       - "traefik.http.routers.sys-models.entrypoints=websecure"
       - "traefik.http.routers.sys-models.tls.certresolver=letsencrypt"
       - "traefik.http.services.sys-models.loadbalancer.server.port=8001"
+      - "traefik.http.middlewares.sys-models-strip.stripprefix.prefixes=/v1/models"
+      - "traefik.http.routers.sys-models.middlewares=sys-models-strip@docker"
 
-  # ───────────────────────── Web Client (Production) ─────────────────────────
   xarvis-client-prod:
     build:
       context: ./services/client
       dockerfile: Dockerfile
       target: production
       args:
-        VITE_API_URL: https://xarvis.xpan9.tech/api/v1
+        VITE_API_URL: https://xarvis.xpan9.tech/v1/backend/api/v1
     restart: unless-stopped
     networks: [ backend ]
     ports: [ "3000:80" ]
