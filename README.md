@@ -1,47 +1,76 @@
 # Xarvis AI System (v0.1)
 
 Xarvis is a **modular AI assistant system** written in Go.  
-It integrates with **Thinker (research AI)** and is designed to behave like Jarvis:  
+It integrates as a **thinker** and is designed to behave like Jarvis:  
 a single conversational brain that **listens, thinks, remembers, and acts**.  
 
-Xarvis is not just reactive — it can **think in the background**, reflect on memory, propose new insights, and manage projects for its user.
+Xarvis is not just reactive — it can **think in the background**, reflect on memory, propose new insights, and manage projects for the user.
+
+This is essentially the system for the entire suite and different
+clients will be written to integrate and connect with it. 
+Allows connecting to multiple endpoints with which audio/text
+can be streamed (in or out (or both)). 
+This way, users can have the `hardware: esp32 or custom chip` 
+wearable like handband which can connect with earpods, speaker
+to provide the assistant system. 
 
 ---
 
-## 🚀 How to Run
+## How to Run
 
-Xarvis is containerized with Docker Compose. A Makefile provides simple commands.
+Xarvis is containerized with Docker Compose. You can spin up
+a working version using make. However, you'll need the env variables. 
 
 ```sh
-# Start core services (Go server + MQTT broker)
-make up
-
-# Add reverse proxy (Traefik, routes /v1/*)
-make proxy
-
-# Add local AI services (Ollama LLM + TEI embeddings)
-make ai
-
-# Add voice (Whisper STT + Piper TTS)
-make voice
-
-# Use Qdrant vector backend instead of TiDB
-make qdrant
-
-# Use local TiDB dev instance (Serverless preferred in prod)
-make tidb
-
-# View logs
-make logs
-
-# Stop everything
-make down
-
-# Clean volumes + remove orphans
-make clean.
+# prod:
+make prod
 ```
 
-## 🧩 Services
+## Few functions:
+1. Task management with `Asynq` to schedule tasks which are
+at execution time, passes back into the LLM to decide way forward
+and streams output response (if any) to the user's hardware through
+their endpoints. 
+2. Web search using `Tavily` to add more context with web.
+3. Project and notes management. This allows user to create
+projects, manage logs, think with LLM (like Tony Stark working)
+with Jarvis to solve complex projects.
+4. Memory using `TIDB cloud` and `Gemini` embedder to allow storing
+contextual details and good vector search.
+5. Tool management system that unifies most functionalities and
+can be *filtered* to reduce compute cost.
+6. Text to speech using `tts-piper` with some configurable options.
+Will be further developed later.
+7. Speech to text for having conversation with `whisper` with a 
+trigger system by saying `xarvis` or `assistant`. Will support
+contextual trigger later (like noting important info and registering) for you.
+8. Tool call security to ensure users don't access others. This 
+is implemented by ensuring system passes user context to every tool
+call. Will later implement a more robust `chroot like` system, thanks to learning about Operating systems.
+
+**There are also a few other docs like in internal/domain/voicestream.../spec.md, ...**
+
+## Notes for now:
+The system is still fragile and breaks for a few things like 
+- scheduled tasks may be completed (check tasks page) but when llm
+is reporting, says can't find the task. 
+- system checking notes for memories (will work on system prompts).
+- not getting responses at times, reload and try again.
+- messages disappearing after a while (not a bug actually). The
+plan is to have a job that spins up periodically per user and 
+summarizes all messages into memory (if necessary) then deletes 
+the messages. This is to support a more `retentive memory` logic. 
+Just how humans regurgitate and store important info in long term 
+memory.
+- some other issues as well, if system goes off at any point, for
+now you can reach out via `xpanvictor@gmail.com`, will set up
+properly soon.
+
+There are a bunch of things not mentioned or even implemented yet,
+it's going to be a long term project.   
+Thank you.
+
+## Services
 
 ### 1. Conversation management
 Handles **all user interactions**:
@@ -107,9 +136,9 @@ Hybrid design separating **data** and **control**:
 
 ### Memory
 - **Default vector backend:** TiDB vector engine (scalable, hybrid with SQL + full-text).  
-- **Alternative backend:** Qdrant (pure vector DB).  
-- **Embedding model:** `bge-base-en`.  
-- **Tenancy:** strict isolation per user.
+- **Embedding model:** `bge-base-en` or `gemini-embedder`.  
+- **Tenancy:** strict isolation per user. 
+- **Implementation:** I have an embedder interface to support different embedders.
 
 ### Project system
 - Threaded **task runner** that executes workflows inside the system.  

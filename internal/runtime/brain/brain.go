@@ -216,6 +216,26 @@ func (b *Brain) Decide(ctx context.Context, msgs []types.Message, outCh *adapter
 }
 
 func (b *Brain) processMsg(ctx context.Context, contractInput adapters.ContractInput, responseChannel adapters.ContractResponseChannel) {
+	// Add recover to prevent any panics from crashing the server
+	defer func() {
+		if r := recover(); r != nil {
+			b.logger.Error(fmt.Sprintf("Recovered from panic in processMsg: %v", r))
+			// Try to send error through channel if possible
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						b.logger.Error(fmt.Sprintf("Could not send panic error through response channel: %v", r))
+					}
+				}()
+				select {
+				case responseChannel <- []adapters.ContractResponseDelta{{Error: fmt.Errorf("internal server error: %v", r)}}:
+				default:
+					b.logger.Error("Could not send panic error through response channel")
+				}
+			}()
+		}
+	}()
+
 	// Don't close the channel here - mux.Stream already closes it
 	err := b.mux.Stream(ctx, contractInput, &responseChannel)
 	if err != nil {
