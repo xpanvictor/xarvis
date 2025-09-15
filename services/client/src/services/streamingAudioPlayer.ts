@@ -7,8 +7,8 @@ export class StreamingPCMAudioPlayer {
     private bufferedChunks: Float32Array[] = [];
     private scheduledSources: AudioBufferSourceNode[] = [];
     private nextScheduleTime = 0;
-    private minBufferDuration = 0.015; // 15ms minimum buffer before starting
-    private chunkDuration = 0.005; // 5ms chunks for ultra-smooth playback
+    private minBufferDuration = 0.025; // 25ms minimum buffer before starting
+    private chunkDuration = 0.010; // 10ms chunks for smoother playback
     private isInitialized = false;
     private lastScheduledTime = 0;
 
@@ -116,25 +116,44 @@ export class StreamingPCMAudioPlayer {
                 return; // Wait for more buffer
             }
 
-            // Start playing - ALWAYS set initial schedule time to current time + small offset
+            // Start playing - set initial schedule time with buffer for larger chunks
             this.isPlaying = true;
-            this.nextScheduleTime = this.audioContext.currentTime + 0.01; // Start 10ms from now
-            console.log('▶️ Starting seamless streaming audio playback');
+            this.nextScheduleTime = this.audioContext.currentTime + 0.015; // Start 15ms from now
+            console.log('▶️ Starting smooth streaming audio playback');
         }
 
-        // Take a chunk for playback
-        const chunkData = this.takeChunkForPlayback(minSamples);
+        // Schedule multiple chunks ahead for smoother playback
+        this.scheduleAheadChunks();
+    }
 
-        if (chunkData.length > 0) {
-            this.scheduleChunkPlayback(chunkData);
+    private scheduleAheadChunks() {
+        // Very conservative - only schedule 1 chunk ahead to avoid conflicts
+        const maxChunksAhead = 1; // Only one chunk at a time
+
+        for (let i = 0; i < maxChunksAhead; i++) {
+            const minSamples = Math.floor(this.sampleRate * this.chunkDuration);
+            if (this.getTotalBufferedSamples() < minSamples) {
+                break; // Not enough data for more chunks
+            }
+
+            // Take a chunk for playback
+            const chunkData = this.takeChunkForPlayback(minSamples);
+
+            if (chunkData.length > 0) {
+                this.scheduleChunkPlayback(chunkData);
+            } else {
+                break; // No more data
+            }
         }
+
+        // Don't schedule more aggressively - let natural flow handle it
     }
 
     private takeChunkForPlayback(targetSamples: number): Float32Array {
         let collectedSize = 0;
         const playbackChunks: Float32Array[] = [];
 
-        // Take chunks until we have enough data
+        // Take chunks until we have enough data - simplified, no overlap
         while (collectedSize < targetSamples && this.bufferedChunks.length > 0) {
             const chunk = this.bufferedChunks[0];
             const remaining = targetSamples - collectedSize;
@@ -176,16 +195,20 @@ export class StreamingPCMAudioPlayer {
             return;
         }
 
+        // Skip crossfade for now - test if basic chunking works
+        // const smoothedAudioData = this.applyCrossfade(audioData);
+        const smoothedAudioData = audioData; // No crossfade
+
         // Create audio buffer
         const audioBuffer = this.audioContext.createBuffer(
             this.channels,
-            audioData.length,
+            smoothedAudioData.length,
             this.sampleRate
         );
 
         // Copy audio data
         const channelData = audioBuffer.getChannelData(0);
-        channelData.set(audioData);
+        channelData.set(smoothedAudioData);
 
         // Create source node
         const source = this.audioContext.createBufferSource();
@@ -196,20 +219,20 @@ export class StreamingPCMAudioPlayer {
         const startTime = this.nextScheduleTime;
         const currentTime = this.audioContext.currentTime;
 
-        // If the scheduled time is in the past, schedule immediately with minimal offset
-        const actualStartTime = Math.max(startTime, currentTime + 0.001);
-
-        // If we're significantly behind schedule, reset to current time + small offset
-        const scheduleLag = currentTime - startTime;
-        if (scheduleLag > 0.01) { // More than 10ms behind
-            this.nextScheduleTime = currentTime + 0.002; // Reset schedule time
-            console.log(`⏰ Schedule lag detected (${scheduleLag.toFixed(3)}s), resetting schedule time`);
+        // Conservative timing for larger chunks - add buffer to prevent conflicts
+        let actualStartTime = startTime;
+        if (startTime <= currentTime + 0.005) { // Add 5ms buffer for larger chunks
+            // We're close to schedule time - add offset to prevent conflicts
+            actualStartTime = currentTime + 0.008; // 8ms offset
+            if (startTime < currentTime) {
+                console.log(`⚡ Schedule adjustment (${(currentTime - startTime).toFixed(3)}s behind), using ${actualStartTime.toFixed(3)}s`);
+            }
         }
 
         source.start(actualStartTime);
 
-        // Update next schedule time to start immediately after this chunk ends
-        // This ensures seamless, gapless playback
+        // Update next schedule time for seamless playback
+        // No overlap - just butt chunks together precisely
         this.nextScheduleTime = actualStartTime + audioBuffer.duration;
 
         // Track the source for cleanup
@@ -223,12 +246,12 @@ export class StreamingPCMAudioPlayer {
             }
         };
 
-        console.log(`▶️ Scheduled seamless chunk: ${audioBuffer.duration.toFixed(3)}s at ${actualStartTime.toFixed(3)}s (scheduled: ${startTime.toFixed(3)}s, current: ${currentTime.toFixed(3)}s), next at ${this.nextScheduleTime.toFixed(3)}s`);
+        console.log(`▶️ Scheduled chunk: ${audioBuffer.duration.toFixed(3)}s at ${actualStartTime.toFixed(3)}s`);
 
-        // Schedule next chunk if we have more data
+        // Schedule next chunk with appropriate delay for larger chunks
         if (this.getTotalBufferedSamples() > 0) {
-            // Use setTimeout to avoid blocking the main thread
-            setTimeout(() => this.scheduleNextChunk(), 0);
+            // Longer delay for larger chunks to prevent overwhelming
+            setTimeout(() => this.scheduleNextChunk(), 3);
         }
     }
 
@@ -265,12 +288,73 @@ export class StreamingPCMAudioPlayer {
     // Get buffer health (0-1, where 1 is fully buffered)
     getBufferHealth(): number {
         const minBufferSamples = Math.floor(this.sampleRate * this.minBufferDuration);
-        return Math.min(1.0, this.getTotalBufferedSamples() / minBufferSamples);
+        const optimalBufferSamples = Math.floor(this.sampleRate * 0.08); // 80ms optimal buffer for larger chunks
+        const currentSamples = this.getTotalBufferedSamples();
+
+        if (currentSamples >= optimalBufferSamples) {
+            return 1.0; // Fully buffered
+        } else if (currentSamples >= minBufferSamples) {
+            // Scale between min and optimal
+            return (currentSamples - minBufferSamples) / (optimalBufferSamples - minBufferSamples);
+        } else {
+            return 0.0; // Below minimum
+        }
     }
 
-    // Get buffer duration in seconds
-    getBufferDuration(): number {
-        return this.getTotalBufferedDuration();
+    // Get detailed buffer status
+    getBufferStatus(): { health: number; duration: number; samples: number; isLow: boolean } {
+        const samples = this.getTotalBufferedSamples();
+        const duration = this.getTotalBufferedDuration();
+        const health = this.getBufferHealth();
+        const minBufferSamples = Math.floor(this.sampleRate * this.minBufferDuration);
+
+        return {
+            health,
+            duration,
+            samples,
+            isLow: samples < minBufferSamples
+        };
+    }
+
+    // Get performance metrics for debugging
+    getPerformanceMetrics(): {
+        bufferHealth: number;
+        bufferedDuration: number;
+        isPlaying: boolean;
+        scheduledSources: number;
+        nextScheduleTime: number;
+        currentTime: number;
+        scheduleLag: number;
+    } {
+        const currentTime = this.audioContext?.currentTime || 0;
+        return {
+            bufferHealth: this.getBufferHealth(),
+            bufferedDuration: this.getTotalBufferedDuration(),
+            isPlaying: this.isPlaying,
+            scheduledSources: this.scheduledSources.length,
+            nextScheduleTime: this.nextScheduleTime,
+            currentTime,
+            scheduleLag: this.nextScheduleTime - currentTime
+        };
+    }
+
+    // Pre-warm audio context for better performance
+    async prewarm() {
+        try {
+            await this.ensureAudioContext();
+            if (this.audioContext) {
+                // Create and immediately discard a larger silent buffer to warm up the context
+                const silentBuffer = this.audioContext.createBuffer(1, Math.floor(this.sampleRate * 0.01), 22050); // 10ms buffer
+                const source = this.audioContext.createBufferSource();
+                source.buffer = silentBuffer;
+                source.connect(this.audioContext.destination);
+                source.start();
+                source.stop(this.audioContext.currentTime + 0.001);
+                console.log('🔥 Audio context pre-warmed for optimal performance');
+            }
+        } catch (error) {
+            console.warn('⚠️ Failed to pre-warm audio context:', error);
+        }
     }
 
     // Cleanup

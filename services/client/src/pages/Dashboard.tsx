@@ -57,6 +57,9 @@ export const Dashboard: React.FC = () => {
                 // Initialize WebSocket connection (URL is resolved inside the service)
                 webSocketService.connect();
 
+                // Pre-warm audio context for smoother playback
+                await streamingPCMAudioPlayer.prewarm();
+
                 // Sync mute state from persisted audio service setting
                 const savedMuted = audioService.isMutedState();
                 setMuted(savedMuted);
@@ -205,17 +208,25 @@ export const Dashboard: React.FC = () => {
         // Handle PCM audio data - stream for real-time playback
         const handlePCMAudio = (pcmData: ArrayBuffer) => {
             console.log(`🎵 PCM audio received: ${pcmData.byteLength} bytes, session processing: ${isSessionProcessing}`);
-            // Only skip audio if muted - allow audio to play even after text completion
+            // Only play audio if session is still processing AND not muted
             const muted = useConversationStore.getState().isMuted;
-            if (!muted) {
+            if (!muted && isSessionProcessing) {
                 streamingPCMAudioPlayer.addPCMChunk(pcmData);
                 console.log(`🎵 Streaming PCM chunk added, buffer health: ${streamingPCMAudioPlayer.getBufferHealth().toFixed(2)}`);
-            } else {
-                console.log('🔇 Skipping PCM audio streaming due to mute');
-            }
-        };
 
-        // Handle response messages (from websocket response case)
+                // Log performance metrics very infrequently for larger chunks
+                if (Math.random() < 0.01) { // 1% chance to log
+                    const metrics = streamingPCMAudioPlayer.getPerformanceMetrics();
+                    console.log(`📊 Audio metrics: health=${metrics.bufferHealth.toFixed(2)}, buffered=${metrics.bufferedDuration.toFixed(3)}s`);
+                }
+            } else {
+                if (muted) {
+                    console.log('🔇 Skipping PCM audio streaming due to mute');
+                } else if (!isSessionProcessing) {
+                    console.log('⏹️ Skipping PCM audio streaming - session not processing');
+                }
+            }
+        };        // Handle response messages (from websocket response case)
         const handleMessage = (responseData: any) => {
             console.log('📨 Received message response:', responseData);
 
