@@ -22,8 +22,8 @@ export class StreamingPCMAudioPlayer {
 
     private async initializeAudioContext() {
         try {
-            // Use external context if provided, otherwise create new one
-            if (this.externalAudioContext) {
+            // Use external context if provided and not closed, otherwise create new one
+            if (this.externalAudioContext && this.externalAudioContext.state !== 'closed') {
                 this.audioContext = this.externalAudioContext;
             } else {
                 this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -34,22 +34,27 @@ export class StreamingPCMAudioPlayer {
                 await this.audioContext.resume();
             }
 
-            // Set initial schedule time - start immediately when we have enough data
+            // Reset scheduling state for fresh context
             this.nextScheduleTime = this.audioContext.currentTime;
+            this.isPlaying = false;
+            this.scheduledSources = [];
+            this.bufferedChunks = []; // Clear any buffered chunks when reinitializing
             this.isInitialized = true;
 
-            console.log('🎵 Streaming audio context initialized with seamless playback');
+            console.log('🎵 Streaming audio context initialized/reinitialized with seamless playback');
         } catch (error) {
             console.error('❌ Failed to initialize streaming audio context:', error);
         }
     }
 
     private async ensureAudioContext() {
-        if (!this.audioContext) {
+        if (!this.audioContext || this.audioContext.state === 'closed') {
+            console.log(`🔄 Audio context ${this.audioContext ? 'closed' : 'missing'}, reinitializing...`);
             await this.initializeAudioContext();
         }
 
         if (this.audioContext && this.audioContext.state === 'suspended') {
+            console.log('🔄 Resuming suspended audio context...');
             await this.audioContext.resume();
         }
     }
@@ -207,9 +212,22 @@ export class StreamingPCMAudioPlayer {
             return;
         }
 
-        // Ensure audio context is running
-        if (this.audioContext.state !== 'running') {
-            console.warn(`⚠️ Audio context state: ${this.audioContext.state}, attempting to resume`);
+        // Ensure audio context is running - reinitialize if closed
+        if (this.audioContext.state === 'closed') {
+            console.warn('🔄 Audio context is closed, reinitializing for playback...');
+            this.initializeAudioContext().then(() => {
+                // Retry scheduling after reinitialization
+                if (this.audioContext && this.audioContext.state === 'running') {
+                    this.scheduleChunkPlayback(audioData);
+                }
+            }).catch(error => {
+                console.error('❌ Failed to reinitialize audio context:', error);
+            });
+            return;
+        }
+
+        if (this.audioContext.state === 'suspended') {
+            console.warn(`⚠️ Audio context suspended, attempting to resume`);
             this.audioContext.resume().catch(error => {
                 console.error('❌ Failed to resume audio context:', error);
                 return;
