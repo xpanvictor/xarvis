@@ -67,7 +67,7 @@ func (bi *BrainIntegration) ExecuteTaskWithBrain(
 	messages := append(systemMessages, taskMessage)
 
 	// Process through brain system
-	result, err := bi.brainSystem.ProcessMessage(ctx, userID, sessionID, messages)
+	result, err := bi.brainSystem.ProcessMessageWithStreaming(ctx, userID, sessionID, messages, false)
 	if err != nil {
 		return nil, fmt.Errorf("brain system task execution failed: %w", err)
 	}
@@ -95,7 +95,7 @@ func (bi *BrainIntegration) SendTaskNotification(
 	}
 
 	// Send through brain system with streaming to push to connected devices
-	err := bi.brainSystem.ProcessMessageWithStreaming(ctx, userID, sessionID, []types.Message{notificationMessage}, false)
+	_, err := bi.brainSystem.ProcessMessageWithStreaming(ctx, userID, sessionID, []types.Message{notificationMessage}, false)
 	if err != nil {
 		return fmt.Errorf("failed to send task notification: %w", err)
 	}

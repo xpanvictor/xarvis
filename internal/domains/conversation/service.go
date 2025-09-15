@@ -35,6 +35,21 @@ type conversationService struct {
 	logger             *Logger.Logger
 }
 
+func (c *conversationService) historyContext(ctx context.Context, userID uuid.UUID, msg types.Message) []types.Message {
+	hist := make([]types.Message, 0)
+	mems, err := c.SearchMemories(ctx, userID, msg.Text, nil, 10)
+	if err != nil {
+		return []types.Message{}
+	}
+	for _, m := range mems {
+		hist = append(hist, m.AsMsgForHistory())
+	}
+	histMsgs, err := c.repository.FetchUserMessages(ctx, userID, 0, -1)
+	hist = append(hist, histMsgs...)
+
+	return hist
+}
+
 // ProcessMsg implements ConversationService.
 func (c *conversationService) ProcessMsg(ctx context.Context, userID uuid.UUID, msg types.Message, sysMsgs []types.Message) (*types.Message, error) {
 	// store user msg
@@ -48,6 +63,10 @@ func (c *conversationService) ProcessMsg(ctx context.Context, userID uuid.UUID, 
 	// process msg in brain
 	msgs := make([]types.Message, 0)
 	msgs = append(msgs, sysMsgs...)
+	// history
+	oldMsgs := c.historyContext(ctx, userID, msg)
+	msgs = append(msgs, oldMsgs...)
+
 	msgs = append(msgs, *nmsg)
 	//todo: handle sessions
 	sessionID := uuid.New()
@@ -78,10 +97,20 @@ func (c *conversationService) ProcessMsgAsStream(ctx context.Context, userID uui
 	// process msg in brain
 	msgs := make([]types.Message, 0)
 	msgs = append(msgs, sysMsgs...)
+
+	// history for context
+	oldMsgs := c.historyContext(ctx, userID, msg)
+	msgs = append(msgs, oldMsgs...)
 	msgs = append(msgs, *nmsg)
 	// Generate a session ID for this processing request
 	sessionID := uuid.New()
-	err = brainSystem.ProcessMessageWithStreaming(ctx, userID, sessionID, msgs, false)
+	resp, err := brainSystem.ProcessMessageWithStreaming(ctx, userID, sessionID, msgs, false)
+	// store sys message
+	go func() {
+		// ctxn, cancel := context.WithTimeout(ctx, 2*time.Second)
+		// defer cancel()
+		c.repository.CreateMessage(ctx, userID, *resp)
+	}()
 	return err
 }
 

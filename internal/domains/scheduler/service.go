@@ -106,6 +106,9 @@ func (s *AsynqSchedulerService) ScheduleTask(ctx context.Context, req *TaskExecu
 		Metadata:  req.Metadata,
 	}
 
+	s.logger.Infof("payload-i: %+v", payload)
+
+
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("failed to marshal job payload: %w", err)
@@ -129,14 +132,32 @@ func (s *AsynqSchedulerService) ScheduleTask(ctx context.Context, req *TaskExecu
 
 // ScheduleTaskExecution schedules immediate task execution
 func (s *AsynqSchedulerService) ScheduleTaskExecution(ctx context.Context, taskID, userID uuid.UUID, executeAt time.Time) error {
+	// Add debug logging
+	s.logger.Infof("ScheduleTaskExecution called with taskID: %s, userID: %s", taskID, userID)
+
+	if s.taskService == nil {
+		s.logger.Errorf("taskService is nil in ScheduleTaskExecution! taskID: %s, userID: %s", taskID, userID)
+		return fmt.Errorf("internal error: taskService is not initialized")
+	}
+
 	// Fetch task details using correct method signature
 	taskResp, err := s.taskService.GetTask(ctx, userID.String(), taskID.String())
 	if err != nil {
+		s.logger.Errorf("Failed to get task %s for user %s: %v", taskID, userID, err)
 		return fmt.Errorf("failed to get task: %w", err)
+	}
+
+	if taskResp == nil {
+		s.logger.Errorf("GetTask returned nil response for taskID: %s, userID: %s", taskID, userID)
+		return fmt.Errorf("task response is nil for taskID: %s", taskID)
 	}
 
 	// Convert to domain task
 	domainTask := s.convertResponseToTask(taskResp)
+	if domainTask == nil {
+		s.logger.Errorf("convertResponseToTask returned nil for taskID: %s", taskID)
+		return fmt.Errorf("failed to convert task response to domain task")
+	}
 
 	req := &TaskExecutionRequest{
 		Task:      domainTask,
@@ -248,6 +269,8 @@ func (s *AsynqSchedulerService) handleTaskExecution(ctx context.Context, t *asyn
 	if err := json.Unmarshal(t.Payload(), &payload); err != nil {
 		return fmt.Errorf("failed to unmarshal task execution payload: %w", err)
 	}
+
+	s.logger.Infof("task exec %+v", payload)
 
 	result, err := s.processTaskExecution(ctx, &payload)
 	if err != nil {
@@ -453,6 +476,9 @@ func (s *AsynqSchedulerService) processTaskReminder(ctx context.Context, payload
 
 // convertResponseToTask converts TaskResponse to domain Task
 func (s *AsynqSchedulerService) convertResponseToTask(resp *task.TaskResponse) *task.Task {
+	if resp == nil {
+		return nil
+	}
 	return &task.Task{
 		ID:               resp.ID,
 		UserID:           resp.UserID,
@@ -498,4 +524,9 @@ func (s *AsynqSchedulerService) calculateNextExecution(t *task.Task) time.Time {
 		// Default to daily for custom/unknown types
 		return now.Add(24 * time.Hour)
 	}
+}
+
+// SetTaskService sets the task service dependency (called after initialization to avoid circular dependencies)
+func (s *AsynqSchedulerService) SetTaskService(taskService task.TaskService) {
+	s.taskService = taskService
 }

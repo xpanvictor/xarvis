@@ -33,7 +33,8 @@ var (
 				run the task as defined in the definition and perform any act mentioned in it. If the task
 				involves getting back to the user, for now, you can just send back result. Maybe an alarm at time
 				x, just send response that the reminder time has been completed. Format message properly as
-				a close assistant.
+				a close assistant. Update the user with the result of the task. Just
+				send a well human formated response back after you've marked the status.
 				`,
 			},
 		},

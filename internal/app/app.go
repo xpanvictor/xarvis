@@ -183,6 +183,11 @@ func (a *App) setupDependencies() error {
 		taskServiceImpl.SetScheduler(schedulerAdapter)
 	}
 
+	// Set task service on scheduler to complete the circular dependency
+	if schedulerServiceImpl, ok := a.SchedulerService.(interface{ SetTaskService(task.TaskService) }); ok {
+		schedulerServiceImpl.SetTaskService(deps.TaskService)
+	}
+
 	// Update conversation service with the brain system factory
 	if convService, ok := deps.ConversationService.(interface {
 		SetBrainSystemFactory(*brain.BrainSystemFactory)

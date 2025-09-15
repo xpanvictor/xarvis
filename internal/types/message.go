@@ -2,6 +2,7 @@ package types
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -86,6 +87,17 @@ type Conversation struct {
 	// Relationships
 	Messages []Message `json:"messages"`
 	Memories []Memory  `json:"memories"`
+}
+
+func (m Memory) AsMsgForHistory() Message {
+	content := fmt.Sprintf(`Note for history; importance: %v; content: %v`, m.SaliencyScore, m.Content)
+	return Message{
+		Id:        m.ID,
+		Timestamp: m.CreatedAt,
+		Text:      content,
+		MsgRole:   assistant.SYSTEM,
+		Tags:      []string{"Memory", string(m.SaliencyScore)},
+	}
 }
 
 type MemorySearchRequest struct {

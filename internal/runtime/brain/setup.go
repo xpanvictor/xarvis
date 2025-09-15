@@ -122,7 +122,7 @@ func (bs *BrainSystem) ProcessMessageWithStreaming(
 	sessionID uuid.UUID,
 	msgs []types.Message,
 	disableAudio bool,
-) error {
+) (*types.Message, error) {
 	// Set user context on the executor before processing
 	bs.logger.Infof("This users id is %v", userID)
 	userCtx := &toolsystem.UserContext{
@@ -136,8 +136,9 @@ func (bs *BrainSystem) ProcessMessageWithStreaming(
 	// Create response channel for streaming
 	responseChannel := make(adapters.ContractResponseChannel, 10)
 
+	resp := types.Message{}
 	// Start Brain.Decide with streaming in background
-	go func() {
+	go func(resp *types.Message) {
 		defer func() {
 			if r := recover(); r != nil {
 				bs.logger.Error("Recovered from panic in brain goroutine: %v", r)
@@ -145,12 +146,13 @@ func (bs *BrainSystem) ProcessMessageWithStreaming(
 		}()
 
 		bs.logger.Info("Brain processing starting...")
-		_, err := bs.Brain.Decide(ctx, msgs, &responseChannel)
+		var err error
+		*resp, err = bs.Brain.Decide(ctx, msgs, &responseChannel)
 		if err != nil {
 			bs.logger.Error("Brain decide error: %v", err)
 		}
 		bs.logger.Info("Brain processing completed")
-	}()
+	}(&resp)
 
 	// Pipeline reads from channel until it's closed (blocks until brain is done)
 	bs.logger.Info("Pipeline starting...")
@@ -160,5 +162,5 @@ func (bs *BrainSystem) ProcessMessageWithStreaming(
 	}
 	bs.logger.Info("Pipeline completed")
 
-	return nil
+	return &resp, nil
 }
