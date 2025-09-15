@@ -28,6 +28,7 @@ class AudioService {
     private audioContext: AudioContext | null = null;
     private stream: MediaStream | null = null;
     private analyser: AnalyserNode | null = null;
+    private scriptProcessor: ScriptProcessorNode | null = null;
     private volumeCallback: ((volume: number) => void) | null = null;
     private isRecording = false;
     private isMuted = false;
@@ -75,9 +76,8 @@ class AudioService {
 
     private async initializeAudioContext() {
         try {
-            this.audioContext = new AudioContext({
-                sampleRate: this.settings.sampleRate
-            });
+            // Use browser default sample rate for compatibility
+            this.audioContext = new AudioContext();
         } catch (error) {
             console.error('Failed to initialize AudioContext:', error);
             this.emit('onError', 'Failed to initialize audio system');
@@ -162,28 +162,84 @@ class AudioService {
 
         try {
             this.audioChunks = [];
-            this.mediaRecorder = new MediaRecorder(this.stream!, {
-                mimeType: 'audio/webm; codecs=opus'
-            });
 
-            this.mediaRecorder.ondataavailable = (event) => {
-                if (event.data.size > 0) {
-                    this.audioChunks.push(event.data);
+            // Ensure audio context exists and is running
+            if (!this.audioContext) {
+                await this.initializeAudioContext();
+            }
 
-                    // For streaming mode, process and emit audio data immediately
-                    if (this.isStreaming) {
-                        this.processAudioChunk(event.data);
+            if (!this.audioContext) {
+                throw new Error('Failed to initialize audio context');
+            }
+
+            // Resume audio context if suspended
+            if (this.audioContext.state === 'suspended') {
+                await this.audioContext.resume();
+            }
+
+            // Create source from stream
+            if (!this.stream) {
+                throw new Error('No audio stream available');
+            }
+            const source = this.audioContext.createMediaStreamSource(this.stream);
+
+            // Create script processor for real-time PCM extraction
+            this.scriptProcessor = this.audioContext.createScriptProcessor(16384, 1, 1); // 16KB buffer
+
+            let frameCount = 0;
+            let audioBuffer: Int16Array[] = [];
+            let lastSendTime = Date.now();
+            const SEND_INTERVAL_MS = 200; // Send audio every 200ms
+
+            this.scriptProcessor.onaudioprocess = (e) => {
+                if (!this.isRecording) return;
+
+                const inputBuffer = e.inputBuffer;
+                const inputData = inputBuffer.getChannelData(0);
+
+                // Convert float32 to int16 PCM
+                const pcmData = new Int16Array(inputData.length);
+                for (let i = 0; i < inputData.length; i++) {
+                    pcmData[i] = Math.max(-32768, Math.min(32767, inputData[i] * 32768));
+                }
+
+                // Add to buffer
+                audioBuffer.push(pcmData);
+                frameCount++;
+
+                // Send buffered audio every SEND_INTERVAL_MS
+                const now = Date.now();
+                if (now - lastSendTime >= SEND_INTERVAL_MS || audioBuffer.length >= 5) {
+                    if (audioBuffer.length > 0) {
+                        // Combine all buffered frames into one larger chunk
+                        const totalSamples = audioBuffer.reduce((sum, chunk) => sum + chunk.length, 0);
+                        const combinedPcm = new Int16Array(totalSamples);
+                        let offset = 0;
+
+                        for (const chunk of audioBuffer) {
+                            combinedPcm.set(chunk, offset);
+                            offset += chunk.length;
+                        }
+
+                        // Send combined chunk
+                        this.emit('onAudioData', combinedPcm.buffer);
+
+                        // Clear buffer
+                        audioBuffer = [];
+                        lastSendTime = now;
                     }
                 }
             };
 
-            this.mediaRecorder.onstop = () => {
-                this.processRecordedAudio();
-            };
+            // Connect the audio graph
+            source.connect(this.scriptProcessor);
+            this.scriptProcessor.connect(this.audioContext.destination);
 
-            this.mediaRecorder.start(100); // Collect data every 100ms
             this.isRecording = true;
             this.updateState('recording');
+
+            console.log('✅ Audio recording started with PCM streaming');
+            console.log(`🎤 Audio context sample rate: ${this.audioContext.sampleRate}Hz`);
 
             return true;
         } catch (error) {
@@ -194,11 +250,19 @@ class AudioService {
     }
 
     stopRecording() {
-        if (this.mediaRecorder && this.isRecording) {
-            this.mediaRecorder.stop();
-            this.isRecording = false;
-            this.updateState('processing');
+        this.isRecording = false;
+
+        // Disconnect and clean up script processor
+        if (this.scriptProcessor) {
+            try {
+                this.scriptProcessor.disconnect();
+            } catch (e) {
+                // Already disconnected
+            }
+            this.scriptProcessor = null;
         }
+
+        this.updateState('idle');
         this.stopStreaming();
     }
 
@@ -218,66 +282,25 @@ class AudioService {
         console.log('Stopped audio streaming mode');
     }
 
-    // Process individual audio chunks for streaming
-    private async processAudioChunk(chunk: Blob) {
-        try {
-            const arrayBuffer = await chunk.arrayBuffer();
-            const pcmData = await this.convertToPCM(arrayBuffer);
-            this.emit('onAudioData', pcmData);
-        } catch (error) {
-            console.error('Failed to process audio chunk:', error);
-        }
-    }
+    // Process individual audio chunks for streaming (no longer needed with ScriptProcessor)
+    // private async processAudioChunk(chunk: Blob) {
+    //     try {
+    //         const arrayBuffer = await chunk.arrayBuffer();
+    //         const pcmData = await this.convertToPCM(arrayBuffer);
+    //         this.emit('onAudioData', pcmData);
+    //     } catch (error) {
+    //         console.error('Failed to process audio chunk:', error);
+    //     }
+    // }
 
     private async processRecordedAudio() {
-        if (this.audioChunks.length === 0) {
-            this.updateState('idle');
-            return;
-        }
-
-        try {
-            const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
-            const arrayBuffer = await audioBlob.arrayBuffer();
-
-            // Convert to PCM if needed
-            const pcmData = await this.convertToPCM(arrayBuffer);
-
-            // Send via WebSocket (this will be called from the component)
-            this.emit('onStateChange', 'idle');
-
-            return pcmData;
-        } catch (error) {
-            console.error('Failed to process audio:', error);
-            this.emit('onError', 'Failed to process recorded audio');
-            this.updateState('idle');
-        }
+        // Not used with ScriptProcessor approach
+        this.updateState('idle');
     }
 
     private async convertToPCM(audioData: ArrayBuffer): Promise<ArrayBuffer> {
-        if (!this.audioContext) {
-            await this.initializeAudioContext();
-        }
-
-        if (!this.audioContext) {
-            throw new Error('AudioContext failed to initialize');
-        }
-
-        try {
-            const audioBuffer = await this.audioContext.decodeAudioData(audioData);
-            const pcmData = new Float32Array(audioBuffer.length);
-            audioBuffer.copyFromChannel(pcmData, 0);
-
-            // Convert to 16-bit PCM
-            const pcm16 = new Int16Array(pcmData.length);
-            for (let i = 0; i < pcmData.length; i++) {
-                pcm16[i] = Math.max(-32768, Math.min(32767, pcmData[i] * 32768));
-            }
-
-            return pcm16.buffer;
-        } catch (error) {
-            console.error('Failed to convert to PCM:', error);
-            throw error;
-        }
+        // With ScriptProcessor, we already have PCM data, so just return it
+        return audioData;
     }
 
     // Audio playback
@@ -410,6 +433,16 @@ class AudioService {
             this.mediaRecorder.stop();
         }
 
+        // Clean up script processor
+        if (this.scriptProcessor) {
+            try {
+                this.scriptProcessor.disconnect();
+            } catch (e) {
+                // Already disconnected
+            }
+            this.scriptProcessor = null;
+        }
+
         if (this.stream) {
             this.stream.getTracks().forEach(track => track.stop());
             this.stream = null;
@@ -427,3 +460,6 @@ class AudioService {
 // Create and export singleton instance
 export const audioService = new AudioService();
 export default audioService;
+
+// Export the audio context for use by other services
+export const getAudioContext = () => audioService['audioContext'];

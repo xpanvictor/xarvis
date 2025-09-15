@@ -455,8 +455,23 @@ class WebSocketService {
             return;
         }
 
-        // Send binary audio data directly
-        this.ws.send(audioData);
+        // Create binary message: 4 bytes sample rate + 2 bytes channels + 2 bytes padding + PCM data
+        const header = new ArrayBuffer(8);
+        const headerView = new DataView(header);
+
+        headerView.setUint32(0, sampleRate, true); // Little endian
+        headerView.setUint16(4, channels, true);   // Little endian
+        headerView.setUint16(6, 0, true);          // Reserved padding
+
+        // Combine header and PCM data
+        const combinedBuffer = new Uint8Array(header.byteLength + audioData.byteLength);
+        combinedBuffer.set(new Uint8Array(header), 0);
+        combinedBuffer.set(new Uint8Array(audioData), header.byteLength);
+
+        // Send binary audio data with header
+        this.ws.send(combinedBuffer.buffer);
+
+        console.log(`📡 SENT AUDIO: ${audioData.byteLength} bytes PCM, ${sampleRate}Hz, ${channels}ch`);
     }
 
     sendListeningControl(action: 'start_listening' | 'stop_listening') {

@@ -1,6 +1,9 @@
 // Real-time Streaming PCM Audio Player with Seamless Playback
+import { getAudioContext } from './audio';
+
 export class StreamingPCMAudioPlayer {
     private audioContext: AudioContext | null = null;
+    private externalAudioContext: AudioContext | null = null;
     private isPlaying = false;
     private sampleRate = 22050;
     private channels = 1;
@@ -12,13 +15,19 @@ export class StreamingPCMAudioPlayer {
     private isInitialized = false;
     private lastScheduledTime = 0;
 
-    constructor() {
+    constructor(externalAudioContext?: AudioContext) {
+        this.externalAudioContext = externalAudioContext || null;
         this.initializeAudioContext();
     }
 
     private async initializeAudioContext() {
         try {
-            this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+            // Use external context if provided, otherwise create new one
+            if (this.externalAudioContext) {
+                this.audioContext = this.externalAudioContext;
+            } else {
+                this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+            }
 
             // Resume context if suspended
             if (this.audioContext.state === 'suspended') {
@@ -372,5 +381,5 @@ export class StreamingPCMAudioPlayer {
     }
 }
 
-// Export singleton instance
-export const streamingPCMAudioPlayer = new StreamingPCMAudioPlayer();
+// Export singleton instance - will use audio service context when available
+export const streamingPCMAudioPlayer = new StreamingPCMAudioPlayer(getAudioContext() || undefined);

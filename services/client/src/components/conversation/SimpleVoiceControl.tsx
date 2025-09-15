@@ -19,7 +19,7 @@ export const SimpleVoiceControl: React.FC<SimpleVoiceControlProps> = ({
     } = useConversationStore();
 
     const [isPassiveStreaming, setIsPassiveStreaming] = useState(false);
-    const [isActiveMode, setIsActiveMode] = useState(false);
+    const [isPushToTalkActive, setIsPushToTalkActive] = useState(false);
 
     // Start passive streaming when component mounts and WebSocket is connected
     useEffect(() => {
@@ -32,12 +32,21 @@ export const SimpleVoiceControl: React.FC<SimpleVoiceControlProps> = ({
 
     // Handle listening state changes from backend
     useEffect(() => {
-        if (listeningState === 'active') {
-            setIsActiveMode(true);
-        } else if (listeningState === 'idle') {
-            setIsActiveMode(false);
-        }
-    }, [listeningState]);
+        const handleListeningModeChange = (eventName: string, payload: any) => {
+            if (eventName === 'listening_mode_change') {
+                const newMode = payload?.data;
+                console.log("🎧 Backend listening mode change:", newMode, payload);
+                // We don't need to track active mode locally since push-to-talk handles it
+            }
+        };
+
+        // Listen for backend events
+        webSocketService.on('onEvent', handleListeningModeChange);
+
+        return () => {
+            webSocketService.off('onEvent');
+        };
+    }, []);
 
     const startPassiveStreaming = async () => {
         try {
@@ -46,7 +55,7 @@ export const SimpleVoiceControl: React.FC<SimpleVoiceControlProps> = ({
             // Set up continuous audio streaming
             audioService.on('onAudioData', (audioData: ArrayBuffer) => {
                 if (isConnected) {
-                    webSocketService.sendAudioData(audioData);
+                    webSocketService.sendAudioData(audioData, 16000, 1); // 16kHz, mono
                 }
             });
 
@@ -67,18 +76,17 @@ export const SimpleVoiceControl: React.FC<SimpleVoiceControlProps> = ({
         console.log('Stopped passive audio streaming');
     };
 
-    const handleActiveToggle = () => {
-        if (!isConnected) {
-            console.warn('WebSocket not connected');
-            return;
-        }
+    const handlePushToTalk = (isPressed: boolean) => {
+        if (!isConnected) return;
 
-        if (isActiveMode) {
-            // Stop active mode
-            webSocketService.sendListeningControl('stop_listening');
-        } else {
-            // Start active mode
+        if (isPressed) {
+            // Start active listening
             webSocketService.sendListeningControl('start_listening');
+            setIsPushToTalkActive(true);
+        } else {
+            // Stop active listening
+            webSocketService.sendListeningControl('stop_listening');
+            setIsPushToTalkActive(false);
         }
     };
 
@@ -91,21 +99,21 @@ export const SimpleVoiceControl: React.FC<SimpleVoiceControlProps> = ({
 
     const getStatusText = () => {
         if (!isConnected) return 'Disconnected';
-        if (isActiveMode) return 'Active Listening';
-        if (isPassiveStreaming) return 'Passive Streaming';
+        if (isPushToTalkActive) return 'Push-to-Talk Active';
+        if (isPassiveStreaming) return 'Passive Listening';
         return 'Idle';
     };
 
     const getStatusClass = () => {
         if (!isConnected) return 'disconnected';
-        if (isActiveMode) return 'active';
+        if (isPushToTalkActive) return 'push-to-talk';
         if (isPassiveStreaming) return 'passive';
         return 'idle';
     };
 
     return (
         <div className={`simple-voice-control ${className}`}>
-            {/* Connection Status */}
+            {/* Connection Status and Listening Mode */}
             <div className="status-bar">
                 {getConnectionIcon()}
                 <span className={`status-text ${getStatusClass()}`}>
@@ -113,33 +121,18 @@ export const SimpleVoiceControl: React.FC<SimpleVoiceControlProps> = ({
                 </span>
             </div>
 
-            {/* Active Mode Toggle Button */}
+            {/* Push-to-Talk Button */}
             <button
-                className={`active-toggle ${isActiveMode ? 'active' : ''}`}
-                onClick={handleActiveToggle}
+                className={`push-to-talk ${isPushToTalkActive ? 'active' : ''}`}
+                onMouseDown={() => handlePushToTalk(true)}
+                onMouseUp={() => handlePushToTalk(false)}
+                onMouseLeave={() => handlePushToTalk(false)}
                 disabled={!isConnected}
-                title={isActiveMode ? 'Stop active listening' : 'Start active listening'}
+                title="Hold to activate push-to-talk"
             >
-                {isActiveMode ? (
-                    <>
-                        <MicOff size={16} />
-                        <span>Stop Active</span>
-                    </>
-                ) : (
-                    <>
-                        <Mic size={16} />
-                        <span>Go Active</span>
-                    </>
-                )}
+                <Mic size={16} />
+                <span>Push to Talk</span>
             </button>
-
-            {/* Passive Streaming Indicator */}
-            {isPassiveStreaming && (
-                <div className="streaming-indicator">
-                    <div className="pulse-dot"></div>
-                    <span>Streaming</span>
-                </div>
-            )}
         </div>
     );
 };

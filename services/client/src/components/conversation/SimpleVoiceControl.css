@@ -2,12 +2,13 @@
 .simple-voice-control {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 1rem;
     padding: 0.75rem 1rem;
     background: var(--background-secondary, #f8f9fa);
     border-radius: 8px;
     border: 1px solid var(--border-color, #e1e5e9);
-    max-width: 280px;
+    max-width: 320px;
 }
 
 /* Status Bar */
@@ -53,8 +54,14 @@
     color: var(--error-color, #dc3545);
 }
 
-/* Active Toggle Button */
-.active-toggle {
+/* Status text for push-to-talk */
+.status-text.push-to-talk {
+    color: var(--warning-color, #ffc107);
+    font-weight: 600;
+}
+
+/* Push-to-Talk Button */
+.push-to-talk {
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -67,28 +74,30 @@
     cursor: pointer;
     transition: all 0.2s ease;
     min-width: 100px;
+    user-select: none;
 }
 
-.active-toggle:hover:not(:disabled) {
-    border-color: var(--primary-color, #007bff);
-    background: var(--primary-light, #f8f9ff);
+.push-to-talk:hover:not(:disabled) {
+    border-color: var(--warning-color, #ffc107);
+    background: var(--warning-light, #fff8e1);
 }
 
-.active-toggle:disabled {
+.push-to-talk:disabled {
     opacity: 0.6;
     cursor: not-allowed;
     background: var(--background-disabled, #f8f9fa);
 }
 
-.active-toggle.active {
-    border-color: var(--primary-color, #007bff);
-    background: var(--primary-color, #007bff);
-    color: white;
+.push-to-talk.active {
+    border-color: var(--warning-color, #ffc107);
+    background: var(--warning-color, #ffc107);
+    color: var(--text-dark, #212529);
+    box-shadow: 0 0 0 2px rgba(255, 193, 7, 0.25);
 }
 
-.active-toggle.active:hover:not(:disabled) {
-    background: var(--primary-dark, #0056b3);
-    border-color: var(--primary-dark, #0056b3);
+.push-to-talk.active:hover:not(:disabled) {
+    background: var(--warning-dark, #e0a800);
+    border-color: var(--warning-dark, #e0a800);
 }
 
 /* Streaming Indicator */
@@ -138,7 +147,7 @@
         justify-content: center;
     }
 
-    .active-toggle {
+    .push-to-talk {
         min-width: auto;
         width: 100%;
         justify-content: center;
@@ -156,6 +165,7 @@
         --background-secondary: #1a202c;
         --background-disabled: #2d3748;
         --text-muted: #a0aec0;
+        --text-dark: #1a202c;
         --border-color: #4a5568;
         --primary-color: #4299e1;
         --primary-light: #2a4a6b;
@@ -163,5 +173,8 @@
         --success-color: #48bb78;
         --error-color: #f56565;
         --info-color: #38b2ac;
+        --warning-color: #ed8936;
+        --warning-light: #4a3c2a;
+        --warning-dark: #dd6b20;
     }
 }
