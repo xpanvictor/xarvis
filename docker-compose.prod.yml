@@ -213,6 +213,7 @@ services:
       target: production
       args:
         VITE_API_URL: https://xarvis.xpan9.tech/v1/backend/api/v1
+        VITE_WS_URL: wss://xarvis.xpan9.tech/v1/backend
     restart: unless-stopped
     networks: [ backend ]
     ports: [ "3000:80" ]
