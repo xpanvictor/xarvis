@@ -94,7 +94,7 @@ services:
       - "traefik.http.routers.xarvis.tls.certresolver=letsencrypt"
       - "traefik.http.routers.xarvis.priority=10"
       - "traefik.http.services.xarvis.loadbalancer.server.port=8088"
-      - "traefik.http.middlewares.xarvis-strip.stripprefix.prefixes=/v1/backend"
+      - "traefik.http.middlewares.xarvis-strip.stripPrefix.prefixes.0=/v1/backend"
       - "traefik.http.routers.xarvis.middlewares=xarvis-strip@docker"
 
   # ───────────────────────── Messaging (ESP audio/control) ─────────────────────────
