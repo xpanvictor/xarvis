@@ -92,6 +92,7 @@ services:
       - "traefik.http.routers.xarvis.rule=Host(`xarvis.xpan9.tech`) && PathPrefix(`/v1/backend`)"
       - "traefik.http.routers.xarvis.entrypoints=websecure"
       - "traefik.http.routers.xarvis.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.xarvis.priority=10"
       - "traefik.http.services.xarvis.loadbalancer.server.port=8088"
       - "traefik.http.middlewares.xarvis-strip.stripprefix.prefixes=/v1/backend"
       - "traefik.http.routers.xarvis.middlewares=xarvis-strip@docker"
@@ -222,7 +223,7 @@ services:
       <<: *health
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.client-prod.rule=Host(`xarvis.xpan9.tech`)"
+      - "traefik.http.routers.client-prod.rule=Host(`xarvis.xpan9.tech`) && !PathPrefix(`/v1`)"
       - "traefik.http.routers.client-prod.entrypoints=websecure"
       - "traefik.http.routers.client-prod.tls.certresolver=letsencrypt"
       - "traefik.http.routers.client-prod.priority=1"
