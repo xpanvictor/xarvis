@@ -27,7 +27,7 @@ make prod
 # check `localhost` or `localhost:5173`
 ```
 
-[Pingcap email: xpanvictor@gmail.com](xpanvictor@gmail.com)
+[Pingcap email: xpanvictor@gmail.com](mailto:xpanvictor@gmail.com)
 
 ## Few functions:
 1. Task management with `Asynq` to schedule tasks which are
