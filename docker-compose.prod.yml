@@ -89,7 +89,7 @@ services:
       <<: *health
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.xarvis.rule=Host(`xarvis.xpan9.tech`) && PathPrefix(`/v1/backend`)"
+      - "traefik.http.routers.xarvis.rule=Host(`xarvis.xpan9.tech`) && Path(`/v1/backend`)"
       - "traefik.http.routers.xarvis.entrypoints=websecure"
       - "traefik.http.routers.xarvis.tls.certresolver=letsencrypt"
       - "traefik.http.routers.xarvis.priority=100"
